@@ -80,6 +80,7 @@ input:focus{outline:2px solid var(--violet-2);border-color:var(--violet)}
 .log div:last-child{color:var(--violet);font-weight:500}
 .err{color:var(--crit);margin-top:10px;font-size:14px}
 .hint{display:block;color:var(--g4);font-size:12px;margin-top:5px}
+.hint a{color:var(--violet)}
 #codeRow{margin-top:14px}
 .verdict{padding:16px 18px;border-radius:14px;margin-bottom:14px;background:var(--black);color:var(--white);border-left:5px solid var(--violet)}
 .verdict b{display:block;font-size:17px;margin-bottom:4px}.verdict span{color:#d4d4d8}
@@ -148,9 +149,11 @@ footer b{color:var(--ink)}
       <label class="opt"><input type="checkbox" id="critic" checked> Рецензент (отсев ложных находок)</label>
       <label class="opt"><input type="checkbox" id="full"> Полный отчёт (по умолчанию — краткий)</label>
       <div class="field" id="codeRow">Код доступа<input type="password" id="code" placeholder="выдаётся командой ClarifAI">
-        <small class="hint">или укажите свой ключ Gemini в блоке ниже — тогда код не нужен</small></div>
-      <details id="adv"><summary>Свой ключ и модель</summary>
-        <div class="field">Свой API-ключ (не сохраняется)<input type="password" id="key" placeholder="по умолчанию — ключ сервера"></div>
+        <small class="hint">не нужен, если указать свой ключ Gemini ниже</small></div>
+      <div class="field" id="keyRow">Свой ключ Gemini <span style="color:var(--g3)">(необязательно, не сохраняется)</span>
+        <input type="password" id="key" placeholder="AIza… — по умолчанию используется ключ сервера" autocomplete="off">
+        <small class="hint">Получить бесплатно: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></small></div>
+      <details id="adv"><summary>Модель</summary>
         <div class="field">Модель<input type="text" id="model" placeholder="по умолчанию — из настроек сервера"></div>
       </details>
       <button class="btn" id="run" disabled>Проверить</button>
@@ -200,7 +203,7 @@ let file = null;
 fetch('/api/health').then(r => r.json()).then(h => {
   $('meta').textContent = `v${h.version} · ${h.model}`;
   if (!h.access_code_required) $('codeRow').hidden = true;
-  if (!h.server_key) { $('adv').open = true; $('key').placeholder = 'на сервере ключа нет — укажите свой'; }
+  if (!h.server_key) { $('key').placeholder = 'на сервере ключа нет — укажите свой'; $('codeRow').hidden = true; }
 }).catch(() => {});
 const pick = f => { file = f; $('fname').textContent = f ? `${f.name} · ${(f.size/1024).toFixed(0)} КБ` : ''; $('run').disabled = !f; };
 $('drop').onclick = () => $('file').click();

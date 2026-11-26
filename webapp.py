@@ -136,7 +136,12 @@ async def validate(
 
     q: queue.Queue = queue.Queue()
 
+    import time as _t
+
+    t0 = _t.time()
+
     def progress(stage: str, msg: str):
+        print(f"[run {doc.name}] {_t.time() - t0:6.1f}s {msg}", flush=True)  # видно в логах хостинга
         q.put({"type": "progress", "stage": stage, "message": msg})
 
     def work():
@@ -153,6 +158,9 @@ async def validate(
                 "model": res.passport["model"], "grounding": res.grounding},
                 "md": out["md"], "html": out["html"], "interactive": out["interactive"], "pdf_base64": base64.b64encode(out["pdf"]).decode()})
         except Exception as e:  # noqa: BLE001
+            import traceback
+
+            traceback.print_exc()
             q.put({"type": "error", "message": str(e)[:1000]})
         finally:
             q.put(None)
