@@ -53,6 +53,13 @@ RESPONSES = {
     ], "coverage": [{"req_id": "R-01", "covered_by": [], "comment": "Лимит 5 книг не проверяется"}],
         "glossary_gaps": ["«активный абонемент» — П-1"]},
     "simulate": {"applicable": True, "reason": "Расчёт штрафа", "code": SIM_CODE},
+    "consistency": {"findings": [
+        {"req_ids": ["R-02", "R-05"], "criterion": "S-CON", "severity": "critical",
+         "quotes": [{"text": "Штраф 50 ₸ за каждый полный день просрочки"}, {"text": "Штраф 300 ₸"}],
+         "problem": "Возврат 20 марта: 19 дней − 14 = 5 дней × 50 ₸ = 250 ₸, а критерий ожидает 300 ₸.", "recommendation": "Согласовать формулу и критерий."}]},
+    "probe": {"findings": [
+        {"req_ids": ["R-03"], "criterion": "CMP", "severity": "major", "quotes": [{"text": "При продлении срока"}],
+         "problem": "Сколько раз можно продлевать срок? Документ не отвечает.", "question": "Есть ли лимит продлений?"}]},
 }
 
 

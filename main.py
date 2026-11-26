@@ -19,6 +19,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-pdf", action="store_true", help="Не формировать PDF")
     ap.add_argument("--no-html", action="store_true", help="Не формировать HTML")
     ap.add_argument("--no-sim", action="store_true", help="Отключить проверку расчётом (симуляцию)")
+    ap.add_argument("--fast", action="store_true", help="Без дополнительных проходов (вопросы разработчика, сверка противоречий)")
     ap.add_argument("--no-critic", action="store_true", help="Отключить рецензента")
     ap.add_argument("--full", action="store_true", help="Полный отчёт (по умолчанию — краткий)")
     ap.add_argument("--lint", action="store_true", help="Добавить детерминированные проверки без ИИ (размытые слова, заглушки)")
@@ -55,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
         from validator.config import ENV_FILE
 
         progress("load", f"Модель: {llm.provider}/{llm.model} (настройки: {ENV_FILE if ENV_FILE.exists() else 'файл .env не найден!'})")
-        res = Pipeline(llm=llm, settings=s, options=Options(simulate=not a.no_sim, critic=not a.no_critic, lint=a.lint),
+        res = Pipeline(llm=llm, settings=s, options=Options(simulate=not a.no_sim, critic=not a.no_critic, lint=a.lint, deep=not a.fast),
                        progress=progress).run(doc)
         files = write_reports(res, a.output, pdf=not a.no_pdf, html=not a.no_html, full=a.full)
     except (LLMError, FileNotFoundError, ValueError) as e:

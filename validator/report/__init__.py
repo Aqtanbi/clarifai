@@ -58,6 +58,7 @@ def to_json(result) -> str:
         "coverage": [c.model_dump() for c in result.coverage],
         "glossary_gaps": result.glossary_gaps,
         "simulation": sim,
+        "profile": result.profile.model_dump() if result.profile else None,
     }, ensure_ascii=False, indent=1)
 
 

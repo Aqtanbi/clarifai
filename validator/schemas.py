@@ -90,6 +90,10 @@ class IndividualResponse(BaseModel):
     findings: list[Finding] = Field(default_factory=list)
 
 
+class FindingsResponse(BaseModel):
+    findings: list[Finding] = Field(default_factory=list)
+
+
 class Coverage(BaseModel):
     req_id: str
     covered_by: list[str] = Field(default_factory=list, description="ID требований-критериев приёмки, которые проверяют это требование")

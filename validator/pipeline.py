@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -17,11 +18,11 @@ from .lint import run_lint
 from .llm import LLM
 from .parsing import Document
 from .prompts import (
-    SYSTEM, critic_prompt, extract_prompt, profile_context, profile_prompt, individual_prompt, set_prompt, simulation_fix_prompt, simulation_prompt,
+    SYSTEM, consistency_prompt, critic_prompt, extract_prompt, probe_prompt, profile_context, profile_prompt, individual_prompt, set_prompt, simulation_fix_prompt, simulation_prompt,
 )
 from .sandbox import UnsafeCode, run_code
 from .schemas import (
-    Assessment, Coverage, CriticResponse, DocProfile, ExtractResponse, Finding, IndividualResponse, Quote, Requirement,
+    Assessment, Coverage, CriticResponse, DocProfile, FindingsResponse, ExtractResponse, Finding, IndividualResponse, Quote, Requirement,
     SetResponse, SimOutput, SimulationCode, Verdict,
 )
 
@@ -32,6 +33,7 @@ Progress = Callable[[str, str], None]
 class Options:
     simulate: bool = True
     critic: bool = True
+    deep: bool = True  # проходы «вопросы разработчика» и «сверка противоречий»
     lint: bool = False  # детерминированный линтер выключен: все проверки делает ИИ
 
 
@@ -168,6 +170,38 @@ class Pipeline:
                     a.marks[f.criterion] = "fail"
         return assessments, findings
 
+    @staticmethod
+    def _known(findings: list[Finding]) -> list[str]:
+        return [f"{','.join(f.req_ids) or 'набор'} {f.criterion}: {f.problem[:110]}" for f in findings]
+
+    def consistency(self, doc: Document, reqs: list[Requirement], findings: list[Finding]) -> list[Finding]:
+        self.progress("consistency", "Сверка противоречий: критерии приёмки ↔ требования, пары правил")
+        resp = self.llm.ask("consistency", SYSTEM, consistency_prompt(doc.numbered(), [_req_brief(r) for r in reqs],
+                                                                      self._known(findings), self.ctx), FindingsResponse, fix=_fix_findings)
+        for f in resp.findings:
+            f.scope, f.source = "set", "llm"
+        return resp.findings
+
+    def probe(self, doc: Document, reqs: list[Requirement], findings: list[Finding]) -> list[Finding]:
+        covered = {rid for f in findings for rid in f.req_ids}
+        targets = [r for r in reqs if r.id not in covered]
+        if not targets:
+            return []
+        out: list[Finding] = []
+        bs = max(1, self.s.batch_size)
+        batches = [targets[i:i + bs] for i in range(0, len(targets), bs)]
+        for n, batch in enumerate(batches, 1):
+            self.progress("probe", f"Вопросы разработчика к требованиям без находок: пакет {n}/{len(batches)} ({len(targets)} треб.)")
+            resp = self.llm.ask(f"probe-{n}", SYSTEM, probe_prompt(doc.numbered(), [_req_brief(r) for r in batch],
+                                                                   self._known(findings + out), self.ctx), FindingsResponse, fix=_fix_findings)
+            ids = {r.id for r in batch}
+            for f in resp.findings:
+                if f.req_ids and not ids.intersection(f.req_ids):
+                    continue
+                f.scope, f.source = "requirement", "llm"
+                out.append(f)
+        return out
+
     def check_set(self, doc: Document, reqs: list[Requirement]) -> SetResponse:
         self.progress("set", "Проверка набора требований целиком")
         resp = self.llm.ask("set", SYSTEM, set_prompt(doc.numbered(), [_req_brief(r) for r in reqs], self.ctx), SetResponse,
@@ -192,17 +226,25 @@ class Pipeline:
                 rr = run_code(code, timeout=self.s.sim_timeout)
                 err = None if rr.ok else (rr.stderr or f"код возврата {rr.returncode}")
                 if not err:
+                    out = None
                     try:
                         out = SimOutput.model_validate(json.loads(rr.stdout.strip().splitlines()[-1] if rr.stdout.strip() else ""))
-                        res.update(status="ok", code=code, output=out)
-                        return res
                     except Exception as e:  # stdout не JSON по контракту
                         try:
                             out = SimOutput.model_validate(json.loads(rr.stdout))
-                            res.update(status="ok", code=code, output=out)
-                            return res
                         except Exception:
                             err = f"Вывод не соответствует контракту JSON: {e}\nstdout: {rr.stdout[:1500]}"
+                    if out is not None:
+                        res.update(status="ok", code=code, output=out)
+                        # каждый критерий приёмки должен быть проверен своим сценарием
+                        sources = " ".join(c.source for r_ in out.results for c in r_.checks)
+                        missing = [r.id for r in reqs if r.kind == "acceptance" and r.id not in sources]
+                        if not missing or attempt == 3:
+                            return res
+                        self.progress("simulate", f"Нет сценариев для критериев приёмки {', '.join(missing)} — дозапрашиваю")
+                        err = (f"Программа выполнилась, но нарушено требование покрытия: нет сценариев для критериев приёмки "
+                               f"{', '.join(missing)} (их id должны быть в поле source). Добавь по сценарию на каждый, сохранив существующие. "
+                               f"Тексты: " + "; ".join(f"{r.id}: {r.quote}" for r in reqs if r.id in missing))
             except UnsafeCode as e:
                 err = f"Код отклонён проверкой безопасности: {e}"
             res["errors"].append(err)
@@ -210,7 +252,8 @@ class Pipeline:
                 break
             fixed = self.llm.ask(f"simulate-fix-{attempt}", SYSTEM, simulation_fix_prompt(code, err), SimulationCode)
             code = fixed.code or code
-        res.update(status="failed", code=code)
+        if res.get("status") != "ok":
+            res.update(status="failed", code=code)
         return res
 
     @staticmethod
@@ -230,7 +273,9 @@ class Pipeline:
                 # варианты, при которых сценарий проходит — признак неоднозначности
                 passing = [r.variant for r in out.results
                            if r.scenario_id == res.scenario_id and r.variant not in literal and all(x.ok for x in r.checks)]
-                rids = [rid for key, rid in by_doc_id.items() if key and key in c.source]
+                rids = list(dict.fromkeys(re.findall(r"R-\d+", c.source)
+                                          + [rid for key, rid in by_doc_id.items() if key and key in c.source]))
+                rids = [x for x in rids if x in {r.id for r in reqs}]
                 ev = f"Сценарий {res.scenario_id} «{res.title}»: по источнику {c.source} ожидается «{c.expected}», по модели остальных правил получается «{c.actual}»."
                 if passing:
                     ev += f" Сценарий проходит только при альтернативном прочтении: {', '.join(passing)}."
@@ -274,6 +319,14 @@ class Pipeline:
         st = time.time(); assessments, findings = self.check_individual(doc, reqs); tick("Проверка требований", st)
         st = time.time(); set_resp = self.check_set(doc, reqs); tick("Проверка набора", st)
         findings += set_resp.findings
+        if self.o.deep:
+            for name, stage in (("Сверка противоречий", self.consistency), ("Вопросы разработчика", self.probe)):
+                st = time.time()
+                try:
+                    findings += stage(doc, reqs, findings)
+                except Exception as e:  # дополнительные проходы не должны ронять прогон
+                    self.progress("deep", f"{name}: этап пропущен ({str(e)[:150]})")
+                tick(name, st)
 
         sim = {"status": "disabled", "reason": "Отключено параметром запуска", "code": "", "output": None, "attempts": 0, "errors": []}
         if self.o.simulate and prof is not None and not prof.formalizable:
