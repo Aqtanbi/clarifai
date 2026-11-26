@@ -30,6 +30,22 @@ from validator.report import render_all
 
 MAX_UPLOAD = 4 * 1024 * 1024  # лимит тела запроса Vercel ~4.5 МБ
 ACCESS_CODE = os.getenv("ACCESS_CODE", "")  # если задан — требуется для запуска с серверным ключом
+RUNS_PER_HOUR = int(os.getenv("RUNS_PER_HOUR", "6"))  # лимит прогонов с одного адреса на серверном ключе (0 — без лимита)
+_runs: dict[str, list[float]] = {}
+
+
+def _rate_limited(ip: str) -> bool:
+    import time
+
+    if RUNS_PER_HOUR <= 0:
+        return False
+    now = time.time()
+    hits = [t for t in _runs.get(ip, []) if now - t < 3600]
+    if len(hits) >= RUNS_PER_HOUR:
+        _runs[ip] = hits
+        return True
+    _runs[ip] = hits + [now]
+    return False
 MCP_TOKEN = os.getenv("MCP_TOKEN", "")  # если задан — /mcp требует Authorization: Bearer <MCP_TOKEN>
 
 mcp = build_server(remote=True)
@@ -94,6 +110,7 @@ def health():
 
 @app.post("/api/validate")
 async def validate(
+    request: Request,
     file: UploadFile = File(...),
     simulate: bool = Form(True),
     critic: bool = Form(True),
@@ -106,7 +123,12 @@ async def validate(
     if len(data) > MAX_UPLOAD:
         return JSONResponse({"error": "Файл больше 4 МБ"}, status_code=413)
     if not api_key and ACCESS_CODE and access_code != ACCESS_CODE:
-        return JSONResponse({"error": "Нужен код доступа или собственный API-ключ"}, status_code=403)
+        return JSONResponse({"error": "Неверный код доступа. Введите код или укажите свой ключ Gemini."}, status_code=403)
+    if not api_key:
+        ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "?")).split(",")[0].strip()
+        if _rate_limited(ip):
+            return JSONResponse({"error": f"Лимит: не больше {RUNS_PER_HOUR} проверок в час на серверном ключе. "
+                                          "Попробуйте позже или укажите свой ключ Gemini."}, status_code=429)
     try:
         doc = load_document(data=data, filename=file.filename or "document.md")
     except Exception as e:

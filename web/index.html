@@ -79,6 +79,8 @@ input:focus{outline:2px solid var(--violet-2);border-color:var(--violet)}
 .log div{padding:5px 0;border-bottom:1px solid var(--g1)}
 .log div:last-child{color:var(--violet);font-weight:500}
 .err{color:var(--crit);margin-top:10px;font-size:14px}
+.hint{display:block;color:var(--g4);font-size:12px;margin-top:5px}
+#codeRow{margin-top:14px}
 .verdict{padding:16px 18px;border-radius:14px;margin-bottom:14px;background:var(--black);color:var(--white);border-left:5px solid var(--violet)}
 .verdict b{display:block;font-size:17px;margin-bottom:4px}.verdict span{color:#d4d4d8}
 .verdict.нет{border-left-color:var(--crit)}.verdict.да{border-left-color:#22c55e}
@@ -145,10 +147,11 @@ footer b{color:var(--ink)}
       <label class="opt"><input type="checkbox" id="simulate" checked> Проверка расчётом (исполняемая модель)</label>
       <label class="opt"><input type="checkbox" id="critic" checked> Рецензент (отсев ложных находок)</label>
       <label class="opt"><input type="checkbox" id="full"> Полный отчёт (по умолчанию — краткий)</label>
-      <details id="adv"><summary>Ключ и модель</summary>
+      <div class="field" id="codeRow">Код доступа<input type="password" id="code" placeholder="выдаётся командой ClarifAI">
+        <small class="hint">или укажите свой ключ Gemini в блоке ниже — тогда код не нужен</small></div>
+      <details id="adv"><summary>Свой ключ и модель</summary>
         <div class="field">Свой API-ключ (не сохраняется)<input type="password" id="key" placeholder="по умолчанию — ключ сервера"></div>
         <div class="field">Модель<input type="text" id="model" placeholder="по умолчанию — из настроек сервера"></div>
-        <div class="field" id="codeRow">Код доступа<input type="password" id="code"></div>
       </details>
       <button class="btn" id="run" disabled>Проверить</button>
       <div class="err" id="err"></div>
