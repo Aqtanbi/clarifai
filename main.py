@@ -50,7 +50,9 @@ def main(argv: list[str] | None = None) -> int:
         doc = load_document(a.input)
         progress("load", f"Документ: «{doc.title}» ({doc.fmt}, {len(doc.lines)} строк)")
         llm = LLM(s, model=a.model)
-        progress("load", f"Модель: {llm.provider}/{llm.model}")
+        from validator.config import ENV_FILE
+
+        progress("load", f"Модель: {llm.provider}/{llm.model} (настройки: {ENV_FILE if ENV_FILE.exists() else 'файл .env не найден!'})")
         res = Pipeline(llm=llm, settings=s, options=Options(simulate=not a.no_sim, critic=not a.no_critic),
                        progress=progress).run(doc)
         files = write_reports(res, a.output, pdf=not a.no_pdf, html=not a.no_html)

@@ -6,14 +6,16 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+ENV_FILE = ROOT / ".env"
+
 try:
     from dotenv import load_dotenv
 
-    load_dotenv()
+    # .env проекта главнее переменных окружения оболочки: иначе забытая $env:GEMINI_MODEL молча перекрывает настройку
+    load_dotenv(ENV_FILE, override=True)
 except Exception:  # pragma: no cover
     pass
-
-ROOT = Path(__file__).resolve().parent.parent
 
 
 def _default_cache_dir() -> str:
