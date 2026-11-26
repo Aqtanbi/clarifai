@@ -14,6 +14,7 @@ from typing import Callable
 from . import __version__
 from .config import ROOT, Settings
 from .criteria import INDIVIDUAL_CODES, SEVERITY_ORDER
+from .dedupe import merge_duplicates
 from .grounding import Grounder
 from .lint import run_lint
 from .llm import LLM
@@ -465,6 +466,9 @@ class Pipeline:
         findings.sort(key=lambda f: (f.dropped, SEVERITY_ORDER[f.severity], {"simulation": 0, "set": 1, "requirement": 2, "lint": 3}[f.scope]))
         for i, f in enumerate(findings, 1):
             f.id = f"F-{i:03d}"
+        merged = merge_duplicates(findings, reqs)
+        if merged:
+            self.progress("dedupe", f"Склеено дублей: {merged}")
 
         verdict = None
         if self.o.critic:
