@@ -62,6 +62,24 @@ async def mcp_auth(request: Request, call_next):
 app.mount("/mcp", mcp_app)
 
 
+# Диагностика развёртывания: при 404 показываем, какой путь получило приложение (без значений заголовков с секретами)
+from starlette.exceptions import HTTPException as _StarletteHTTPException  # noqa: E402
+
+
+@app.exception_handler(_StarletteHTTPException)
+async def _not_found(request: Request, exc: _StarletteHTTPException):
+    if exc.status_code != 404:
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+    sc = request.scope
+    safe = {k: v for k, v in request.headers.items()
+            if k.startswith(("x-vercel", "x-matched", "x-forwarded", "x-original", "x-invoke", "x-now", "host"))
+            and "token" not in k and "signature" not in k}
+    return JSONResponse({"detail": "Not Found", "debug": {
+        "path": sc.get("path"), "raw_path": (sc.get("raw_path") or b"").decode("latin-1"),
+        "root_path": sc.get("root_path"), "query_string": (sc.get("query_string") or b"").decode("latin-1"),
+        "headers": safe}}, status_code=404)
+
+
 @app.get("/", response_class=HTMLResponse)
 def index():
     return (ROOT / "web" / "index.html").read_text(encoding="utf-8")
