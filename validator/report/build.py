@@ -200,25 +200,9 @@ def build_report(r: RunResult) -> list:
     ], widths=[0.6, 0.4]))
     b.append(Table(["Критерий", "Нарушений"], [[label(k), str(v)] for k, v in crit_by.most_common()], widths=[0.8, 0.2], small=True))
 
-    groups = [
-        ("Непроверяемые", {"VER", "S-VAL"}),
-        ("Противоречивые", {"COR", "S-CON"}),
-        ("Неполные", {"CMP", "S-CMP"}),
-        ("Неоднозначные", {"UNA", "S-COM"}),
-    ]
-    crit = [f for f in active if f.severity == "critical"]
-    b.append(H(3, f"Критичные дефекты ({len(crit)})"))
-    used = set()
-    for name, cset in groups:
-        fs = [f for f in crit if f.criterion in cset]
-        if fs:
-            b.append(P(f"**{name}:**"))
-            b.append(Bullets([f"{f.id} [{', '.join(f.req_ids) or 'набор'}] {_short(f.problem, 220)} — {f.quotes[0].location if f.quotes else ''}" for f in fs]))
-            used |= {f.id for f in fs}
-    rest = [f for f in crit if f.id not in used]
-    if rest:
-        b.append(P("**Прочие критичные:**"))
-        b.append(Bullets([f"{f.id} [{', '.join(f.req_ids) or 'набор'}] {_short(f.problem, 220)}" for f in rest]))
+    from .brief import critical_defects
+
+    b.extend(critical_defects(active, reqs_by_id))
 
     # 7. Итог
     b.append(H(2, "7. Итог"))

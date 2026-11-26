@@ -3,76 +3,56 @@ from __future__ import annotations
 
 from validator.llm import LLM, LLMStats
 
-SIM_CODE = r'''
+SIM_CODE = r"""
 import json
-from datetime import datetime, timezone, timedelta
+from datetime import date
 
-ALMATY = timezone(timedelta(hours=5))
-
-def month_by_purchase(purchased_at):
-    """Ф-2: «Месяц определяется по дате совершения покупки в Алматы»"""
-    return purchased_at.astimezone(ALMATY).strftime("%Y-%m")
-
-def month_by_posting(posted_at):
-    return posted_at.astimezone(ALMATY).strftime("%Y-%m")
+def fine(issued, returned, term=14, per_day=50, cap=1000):
+    # П-2/П-3: «Штраф 50 ₸ за каждый полный день просрочки», «не превышает 1 000 ₸»
+    late = (returned - issued).days - term
+    return min(max(late, 0) * per_day, cap)
 
 results = []
-p = datetime(2026, 1, 31, 23, 58, tzinfo=ALMATY)
-q = datetime(2026, 2, 1, 0, 3, tzinfo=ALMATY)
-for variant, fn, arg in (("literal", month_by_purchase, p), ("by_posting_date", month_by_posting, q)):
-    m = fn(arg)
-    results.append({"scenario_id": "S-02", "title": "Покупка 31.01 23:58, проведена 01.02 00:03", "variant": variant,
-                    "checks": [{"source": "КП-2 vs Ф-2", "quote": "Февральский счётчик вырос на 4 000 ₸",
-                                "expected": "2026-02", "actual": m, "ok": m == "2026-02"}]})
-total = 48500 + 1500
-results.append({"scenario_id": "S-01", "title": "Достижение порога 50 000", "variant": "literal",
-                "checks": [{"source": "КП-1", "quote": "Итог 50 000 ₸ и один push", "expected": "итог=50000, push=1",
-                            "actual": f"итог={total}, push={1 if total >= 50000 else 0}", "ok": True}]})
-print(json.dumps({"variants": [{"name": "literal", "literal": True, "description": "месяц по дате совершения", "basis_quote": "по дате совершения покупки"},
-                               {"name": "by_posting_date", "literal": False, "description": "месяц по дате проведения", "basis_quote": ""}],
+for sid, ret, exp, src, quote in (("S-01", date(2026, 3, 17), 100, "КП-1", "Штраф 100 ₸"),
+                                   ("S-02", date(2026, 3, 20), 300, "КП-2", "Штраф 300 ₸")):
+    a = fine(date(2026, 3, 1), ret)
+    results.append({"scenario_id": sid, "title": f"Возврат {ret.isoformat()}", "variant": "literal",
+                    "checks": [{"source": src + " vs П-2", "quote": quote, "expected": str(exp), "actual": str(a), "ok": a == exp}]})
+print(json.dumps({"variants": [{"name": "literal", "literal": True, "description": "срок 14 дней", "basis_quote": "14 дней"}],
                   "results": results}, ensure_ascii=False))
-'''
+"""
 
 RESPONSES = {
-    "profile": {"doc_type": "ТЗ на доработку + спецификация REST API", "domain": "Банковские карты, уведомления",
-                "structure": "Часть A — функциональные требования и критерии приёмки; часть B — API", "numbering": "Ф-1…Ф-4, остальное без номеров",
-                "defined_terms": [], "formalizable": True,
-                "focus_checks": [{"area": "Периоды", "check": "Границы месяца и часовой пояс", "why": "Ф-2 считает расходы по месяцам"}]},
+    "profile": {"doc_type": "Функциональные требования", "domain": "Библиотека, штрафы",
+                "structure": "П-1…П-4, НФТ, критерии приёмки", "numbering": "П-1…П-4", "defined_terms": [], "formalizable": True,
+                "focus_checks": [{"area": "Расчёт штрафа", "check": "Границы дней и предел суммы", "why": "П-2 и П-3 задают формулу"}]},
     "extract": {"requirements": [
-        {"id": "R-01", "doc_id": "Ф-1", "kind": "functional", "section": "Функциональные требования", "summary": "Порог 1 000–1 000 000 ₸, по умолчанию выключено",
-         "quote": "Держатель активной карты KZT задаёт целый порог от 1 000 до 1 000 000 ₸ включительно.", "line_start": 37, "line_end": 37},
-        {"id": "R-02", "doc_id": "Ф-2", "kind": "functional", "section": "Функциональные требования", "summary": "Месяц по дате совершения покупки",
-         "quote": "Месяц определяется по дате совершения покупки в Алматы.", "line_start": 38, "line_end": 38},
-        {"id": "R-03", "doc_id": "Ф-3", "kind": "functional", "section": "Функциональные требования", "summary": "Один push в месяц",
-         "quote": "На карту приходится максимум один такой push за календарный месяц.", "line_start": 39, "line_end": 39},
-        {"id": "R-04", "doc_id": None, "kind": "acceptance", "section": "Критерии приемки", "summary": "Покупка на стыке месяцев",
-         "quote": "Покупка 31 января в 23:58 на 4 000 ₸", "line_start": 64, "line_end": 64},
-        {"id": "R-05", "doc_id": None, "kind": "api", "section": "Часть B", "summary": "Метод GET для сохранения",
-         "quote": "REST type GET", "line_start": 104, "line_end": 104},
+        {"id": "R-01", "doc_id": "П-1", "kind": "functional", "summary": "До 5 книг", "quote": "Читатель с активным абонементом может взять до 5 книг одновременно.", "line_start": 7},
+        {"id": "R-02", "doc_id": "П-2", "kind": "functional", "summary": "Срок 14 дней, штраф 50 ₸/день", "quote": "Срок возврата — 14 дней с даты выдачи по времени Астаны.", "line_start": 8},
+        {"id": "R-03", "doc_id": "П-4", "kind": "functional", "summary": "Продление без штрафа", "quote": "При продлении срока штраф не начисляется независимо от истории просрочек.", "line_start": 10},
+        {"id": "R-04", "doc_id": None, "kind": "nonfunctional", "summary": "Быстрое уведомление", "quote": "Система быстро уведомляет читателя о штрафе.", "line_start": 14},
+        {"id": "R-05", "doc_id": None, "kind": "acceptance", "summary": "Возврат 20 марта", "quote": "Возврат 20 марта", "line_start": 21},
     ]},
     "individual": {"assessments": [
-        {"req_id": "R-01", "marks": {"NEC": "ok", "UNA": "fail", "CMP": "ok", "VER": "ok"}, "comment": "Не определена «активная карта»."},
-        {"req_id": "R-02", "marks": {"UNA": "fail", "COR": "fail"}, "comment": "Часовой пояс и дата не однозначны."},
-        {"req_id": "R-03", "marks": {"CMP": "ok"}, "comment": "ok"},
-        {"req_id": "R-05", "marks": {"APP": "fail"}, "comment": "GET для изменения состояния."},
+        {"req_id": "R-01", "marks": {"NEC": "ok", "UNA": "fail", "VER": "ok"}, "comment": "Не определён «активный абонемент»."},
+        {"req_id": "R-04", "marks": {"VER": "fail"}, "comment": "Нет измеримого срока."},
     ], "findings": [
-        {"req_ids": ["R-01"], "criterion": "UNA", "severity": "major", "quotes": [{"text": "Держатель активной карты KZT", "line_start": 37}],
-         "problem": "Термин «активная карта» не определён.", "recommendation": "Определить статусы карты.", "rewrite": "Держатель карты в статусе «Активна» ...", "question": "Какие статусы считаются активными?"},
-        {"req_ids": ["R-05"], "criterion": "APP", "severity": "major", "quotes": ["REST type GET"],
-         "problem": "Для сохранения используется GET.", "recommendation": "Использовать PUT/POST.", "rewrite": None, "question": None},
+        {"req_ids": ["R-01"], "criterion": "UNA", "severity": "major", "quotes": [{"text": "с активным абонементом", "line_start": 7}],
+         "problem": "Термин «активный абонемент» не определён.", "recommendation": "Определить статусы абонемента.",
+         "rewrite": "Читатель с абонементом в статусе «Действует» …", "question": "Какие статусы считаются активными?"},
+        {"req_ids": ["R-04"], "criterion": "VER", "severity": "critical", "quotes": ["Система быстро уведомляет читателя"],
+         "problem": "«Быстро» не измеримо.", "recommendation": "Указать срок в минутах."},
         {"req_ids": ["R-02"], "criterion": "UNA", "severity": "minor", "quotes": [{"text": "абсолютно выдуманная цитата о биометрии"}],
          "problem": "Галлюцинация для проверки grounding.", "recommendation": "-"},
     ]},
     "set": {"findings": [
         {"req_ids": ["R-03"], "criterion": "S-CON", "severity": "critical",
-         "quotes": [{"text": "максимум один такой push за календарный месяц"}, {"text": "следующее достижение вызывает push независимо от истории предыдущей настройки"}],
-         "problem": "Ф-3 ограничивает одним push в месяц, Ф-4 требует push после смены порога.", "recommendation": "Определить приоритет правил.", "question": "Нужен ли второй push после смены порога?"},
-        {"req_ids": [], "criterion": "S-CON", "severity": "major", "quotes": [{"text": "Для чужой карты возвращается 404"}],
-         "problem": "Код 404 не входит в список статусов.", "recommendation": "Добавить 404 в список."},
-    ], "coverage": [{"req_id": "R-01", "covered_by": [], "comment": "Границы не проверяются"},
-                    {"req_id": "R-02", "covered_by": ["R-04"], "comment": "Противоречит"}],
-        "glossary_gaps": ["«активная карта» — Ф-1", "«проведённая покупка» — Ф-2"]},
-    "simulate": {"applicable": True, "reason": "Учёт расходов и уведомлений", "code": SIM_CODE},
+         "quotes": [{"text": "Штраф 50 ₸ за каждый полный день просрочки"}, {"text": "штраф не начисляется независимо от истории просрочек"}],
+         "problem": "П-4 отменяет уже начисленный по П-2 штраф или только будущий — неясно.", "recommendation": "Определить приоритет правил.",
+         "question": "Списывается ли накопленный штраф при продлении?"},
+    ], "coverage": [{"req_id": "R-01", "covered_by": [], "comment": "Лимит 5 книг не проверяется"}],
+        "glossary_gaps": ["«активный абонемент» — П-1"]},
+    "simulate": {"applicable": True, "reason": "Расчёт штрафа", "code": SIM_CODE},
 }
 
 
@@ -87,6 +67,6 @@ class MockLLM(LLM):
             import json, re
             ids = re.findall(r'"id": "(F-\d+)"', user)
             return {"decisions": [{"id": i, "action": "keep"} for i in ids][:-1] + ([{"id": ids[-1], "action": "drop", "reason": "дубликат"}] if ids else []),
-                    "verdict": {"ready": "нет", "summary": "Есть противоречия Ф-2/КП-2 и Ф-3/Ф-4.",
+                    "verdict": {"ready": "нет", "summary": "Противоречие П-2/КП-2 и неизмеримое НФТ.",
                                 "top_fixes": [{"finding_ids": ids[:2], "action": "Устранить противоречия"}]}}
         return RESPONSES[key]

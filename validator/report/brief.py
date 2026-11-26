@@ -61,6 +61,30 @@ def _minor_table(fs: list[Finding], reqs_by_id: dict) -> Table:
                  widths=[0.08, 0.14, 0.15, 0.43, 0.2], small=True)
 
 
+GROUPS = [("Непроверяемые формулировки", {"VER", "S-VAL"}), ("Противоречивые формулировки", {"COR", "S-CON"}),
+          ("Неполные формулировки", {"CMP", "S-CMP"})]
+
+
+def critical_defects(active: list[Finding], reqs_by_id: dict) -> list:
+    """Список критичных дефектов по ТЗ: непроверяемые, противоречивые, неполные (+ прочие критичные).
+    В группы попадают критичные и существенные находки соответствующих критериев — с местом в документе."""
+    out: list = [H(3, "Критичные дефекты")]
+    used: set[str] = set()
+    for name, cs in GROUPS:
+        fs = [f for f in active if f.criterion in cs and f.severity in ("critical", "major")]
+        used |= {f.id for f in fs}
+        out.append(P(f"**{name}: {len(fs)}**" + ("" if fs else " — не выявлено.")))
+        if fs:
+            out.append(Bullets([f"{f.id} [{SEVERITY[f.severity]}] {_reqs_label(f, reqs_by_id)}: {_short(f.problem, 200)}"
+                                + (f" — {_ref(f.quotes[0])}" if f.quotes else "") for f in fs]))
+    other = [f for f in active if f.severity == "critical" and f.id not in used]
+    if other:
+        out.append(P(f"**Прочие критичные: {len(other)}**"))
+        out.append(Bullets([f"{f.id} {_crit_name(f.criterion)} · {_reqs_label(f, reqs_by_id)}: {_short(f.problem, 200)}"
+                            + (f" — {_ref(f.quotes[0])}" if f.quotes else "") for f in other]))
+    return out
+
+
 def build_brief(r: RunResult) -> list:
     b: list = []
     reqs_by_id = {x.id: x for x in r.requirements}
@@ -81,11 +105,7 @@ def build_brief(r: RunResult) -> list:
         b.append(H(3, "Главные дефекты"))
         b.append(Bullets([f"**{f.id}** [{SEVERITY[f.severity]}] {_crit_name(f.criterion)} · {_reqs_label(f, reqs_by_id)}: "
                           f"{_short(f.problem, 230)}" for f in top]))
-    if r.verdict.top_fixes:
-        b.append(H(3, "Что исправить в первую очередь"))
-        b.append(Bullets([f"{t.action}" + (f" ({', '.join(t.finding_ids)})" if t.finding_ids else "") for t in r.verdict.top_fixes],
-                         ordered=True))
-    b.append(P("Краткая версия отчёта: незначительные замечания приведены одной строкой, требования без нарушений — только в матрице. "
+    b.append(P("Что исправить в первую очередь — в разделе 7. Краткая версия отчёта: незначительные замечания приведены одной строкой, требования без нарушений — только в матрице. "
                "Полная версия — с параметром --full (на сайте — галочка «Полный отчёт»)."))
 
     # ---------- 1. Паспорт ----------
@@ -177,24 +197,17 @@ def build_brief(r: RunResult) -> list:
 
     # ---------- 6. Сводка ----------
     b.append(H(2, "6. Сводка"))
-    crit = [f for f in active if f.severity == "critical"]
-    groups = [("Непроверяемые", {"VER", "S-VAL"}), ("Противоречивые", {"COR", "S-CON"}), ("Неполные", {"CMP", "S-CMP"})]
-    rows = []
-    used = set()
-    for name, cs in groups:
-        ids = [f.id for f in crit if f.criterion in cs]
-        used |= set(ids)
-        rows.append([name, str(len(ids)), ", ".join(ids) or "—"])
-    other = [f.id for f in crit if f.id not in used]
-    if other:
-        rows.append(["Прочие критичные", str(len(other)), ", ".join(other)])
     b.append(P(f"Требований: **{len(r.requirements)}**, с нарушениями: **{len({x for f in active for x in f.req_ids})}**. "
                f"Нарушений: **{len(active)}** (критичных {sev['critical']}, существенных {sev['major']}, незначительных {sev['minor']})."))
-    b.append(Table(["Критичные дефекты", "Кол-во", "Находки"], rows, widths=[0.3, 0.12, 0.58], small=True))
+    b.extend(critical_defects(active, reqs_by_id))
 
     # ---------- 7. Итог ----------
     b.append(H(2, "7. Итог"))
     b.append(Callout(ready_kind, f"Можно ли начинать разработку и тестирование: {ready_text}", r.verdict.summary))
+    if r.verdict.top_fixes:
+        b.append(H(3, "Что исправить в первую очередь"))
+        b.append(Bullets([f"{t.action}" + (f" ({', '.join(t.finding_ids)})" if t.finding_ids else "") for t in r.verdict.top_fixes],
+                         ordered=True))
     b.append(P(f"Контроль качества: все цитаты сверены с текстом документа ({gs.get('exact', 0) + gs.get('fuzzy', 0)} из "
                f"{gs.get('total', 0)} подтверждены); находки без подтверждённой цитаты и отклонённые рецензентом "
                f"({len(r.findings) - len(active)}) в отчёт не включены."))

@@ -12,7 +12,7 @@ from validator.parsing import load_document  # noqa: E402
 from validator.pipeline import Pipeline  # noqa: E402
 from validator.report import write_reports  # noqa: E402
 
-SAMPLE = ROOT / "tests" / "fixtures" / "sample.md"
+SAMPLE = ROOT / "tests" / "fixtures" / "library_fines.md"
 
 
 def test_pipeline(tmp_path=None):

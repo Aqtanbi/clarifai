@@ -133,18 +133,33 @@ class Pipeline:
         findings: list[Finding] = []
         bs = max(1, self.s.batch_size)
         batches = [reqs[i:i + bs] for i in range(0, len(reqs), bs)]
-        for n, batch in enumerate(batches, 1):
-            self.progress("individual", f"Проверка требований: пакет {n}/{len(batches)}")
-            resp = self.llm.ask(f"individual-{n}", SYSTEM, individual_prompt(doc.numbered(), [_req_brief(r) for r in batch], self.ctx),
+
+        def run_batch(tag: str, batch: list[Requirement]) -> None:
+            resp = self.llm.ask(f"individual-{tag}", SYSTEM, individual_prompt(doc.numbered(), [_req_brief(r) for r in batch], self.ctx),
                                 IndividualResponse, fix=_fix_findings)
             ids = {r.id for r in batch}
             for a in resp.assessments:
-                if a.req_id in ids:
+                if a.req_id in ids and a.marks:
                     a.marks = {k: v for k, v in a.marks.items() if k in INDIVIDUAL_CODES}
                     assessments[a.req_id] = a
             for f in resp.findings:
+                if f.req_ids and not ids.intersection(f.req_ids):
+                    continue  # находка не про требования этого пакета — её даст свой пакет
                 f.scope, f.source = "requirement", "llm"
                 findings.append(f)
+
+        for n, batch in enumerate(batches, 1):
+            self.progress("individual", f"Проверка требований: пакет {n}/{len(batches)}")
+            run_batch(str(n), batch)
+        # ТЗ: проверка КАЖДОГО требования — если модель пропустила часть требований, дозапрашиваем их
+        missing = [r for r in reqs if r.id not in assessments]
+        if missing:
+            self.progress("individual", f"Модель пропустила оценку {len(missing)} требований — дозапрашиваю")
+            for i in range(0, len(missing), bs):
+                run_batch(f"retry-{i // bs + 1}", missing[i:i + bs])
+        still = [r.id for r in reqs if r.id not in assessments]
+        if still:
+            self.progress("individual", f"Без оценки модели остались: {', '.join(still)}")
         # гарантируем согласованность: fail в матрице ⇔ есть находка
         for f in findings:
             for rid in f.req_ids:
