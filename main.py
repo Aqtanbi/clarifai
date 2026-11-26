@@ -1,4 +1,4 @@
-"""CLI: python main.py <файл требований> -o <файл отчёта> [--no-pdf] [--no-sim]"""
+"""ClarifAI CLI: python main.py <файл требований> -o <файл отчёта> [--no-pdf] [--no-sim]"""
 from __future__ import annotations
 
 import argparse
@@ -13,7 +13,7 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             pass
 
-    ap = argparse.ArgumentParser(description="ИИ-агент статической проверки требований (ISO/IEC/IEEE 29148, IEEE 830)")
+    ap = argparse.ArgumentParser(description="ClarifAI — ИИ-агент статической проверки требований (ISO/IEC/IEEE 29148, IEEE 830)")
     ap.add_argument("input", nargs="?", help="Путь к документу требований (.pdf, .docx, .md, .txt, .html)")
     ap.add_argument("-o", "--output", default="reports/report.md", help="Путь к отчёту (.md; рядом лягут .html и .pdf)")
     ap.add_argument("--no-pdf", action="store_true", help="Не формировать PDF")

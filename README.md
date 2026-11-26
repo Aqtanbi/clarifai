@@ -1,4 +1,4 @@
-# AI Requirements Validator
+# ClarifAI
 
 ИИ-агент статической проверки документа с требованиями по **ISO/IEC/IEEE 29148:2018** (п. 5.2.5, 5.2.6) и **IEEE Std 830-1998** (п. 4.3).
 Читает документ (PDF, DOCX, MD, TXT, HTML), выделяет отдельные требования, проверяет каждое требование и набор целиком,
@@ -11,8 +11,8 @@
 ## Быстрый старт (Windows)
 
 ```bat
-git clone <url-репозитория>
-cd ai-req-validator
+git clone https://github.com/Aqtanbi/adamizer.git
+cd adamizer
 py -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
@@ -113,9 +113,9 @@ uvicorn webapp:app --reload
 ```json
 {
   "mcpServers": {
-    "requirements-validator": {
-      "command": "C:\\path\\to\\ai-req-validator\\.venv\\Scripts\\python.exe",
-      "args": ["C:\\path\\to\\ai-req-validator\\mcp_server.py"],
+    "clarifai": {
+      "command": "C:\\path\\to\\adamizer\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\path\\to\\adamizer\\mcp_server.py"],
       "env": { "GEMINI_API_KEY": "ваш_ключ" }
     }
   }

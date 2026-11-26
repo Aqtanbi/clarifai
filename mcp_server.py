@@ -1,4 +1,4 @@
-"""MCP-сервер (stdio) для Claude Desktop / Cursor / VS Code: python mcp_server.py"""
+"""ClarifAI: MCP-сервер (stdio) для Claude Desktop / Cursor / VS Code: python mcp_server.py"""
 import sys
 from pathlib import Path
 

@@ -1,4 +1,4 @@
-"""Веб-интерфейс и HTTP API агента (FastAPI). Локально: `uvicorn webapp:app --reload`; на Vercel — api/index.py.
+"""ClarifAI: веб-интерфейс и HTTP API агента (FastAPI). Локально: `uvicorn webapp:app --reload`; на Vercel — api/index.py.
 
 Маршруты:
   GET  /               — страница загрузки документа

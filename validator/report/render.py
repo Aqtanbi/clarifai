@@ -144,14 +144,14 @@ def to_pdf(blocks: list, path: str | Path, title: str = "Отчёт") -> None:
     pdf.add_font("DejaVu", "BI", str(FONTS / "DejaVuSans-Bold.ttf"))
     pdf.add_font("Mono", "", str(FONTS / "DejaVuSansMono.ttf"))
     pdf.set_title(title)
-    pdf.set_creator("AI Requirements Validator")
+    pdf.set_creator("ClarifAI")
     pdf.alias_nb_pages()
 
     def footer():
         pdf.set_y(-10)
         pdf.set_font("DejaVu", "", 7)
         pdf.set_text_color(130)
-        pdf.cell(0, 5, f"{title} — стр. {pdf.page_no()}/{{nb}}", align="C")
+        pdf.cell(0, 5, f"ClarifAI · {title} — стр. {pdf.page_no()}/{{nb}}", align="C")
         pdf.set_text_color(0)
 
     pdf.footer = footer  # type: ignore[assignment]

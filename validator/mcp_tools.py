@@ -19,7 +19,7 @@ from .report.build import build_report
 from .report.render import to_markdown
 
 INSTRUCTIONS = (
-    "Агент статической проверки требований по ISO/IEC/IEEE 29148:2018 и IEEE 830-1998. "
+    "ClarifAI — агент статической проверки требований по ISO/IEC/IEEE 29148:2018 и IEEE 830-1998. "
     "validate_requirements — полный прогон (нарезка, проверка требований и набора, проверка расчётом, рецензент) "
     "и отчёт на русском; extract_requirements — только нарезка; verify_quote — проверить, что цитата есть в документе; "
     "list_criteria — критерии проверки. Полный прогон занимает 1–4 минуты."
@@ -40,7 +40,7 @@ def _summary(res) -> dict:
 
 
 def build_server(remote: bool = False) -> MCPServer:
-    mcp = MCPServer("requirements-validator", instructions=INSTRUCTIONS, version="0.1.0")
+    mcp = MCPServer("clarifai", instructions=INSTRUCTIONS, version="0.1.0")
 
     @mcp.tool(description="Полная проверка документа требований. Возвращает сводку и отчёт в Markdown. "
                           "text — текст документа (markdown/plain), filename — имя для паспорта отчёта.")

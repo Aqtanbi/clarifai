@@ -59,15 +59,15 @@ def agent_version() -> str:
 
     sha = os.getenv("VERCEL_GIT_COMMIT_SHA") or os.getenv("GIT_COMMIT")
     if sha:
-        return f"v{__version__} ({sha[:8]})"
+        return f"ClarifAI v{__version__} ({sha[:8]})"
     try:
         desc = subprocess.run(["git", "describe", "--tags", "--always", "--dirty"], cwd=ROOT,
                               capture_output=True, text=True, timeout=5).stdout.strip()
         if desc:
-            return f"v{__version__} (git {desc})"
+            return f"ClarifAI v{__version__} (git {desc})"
     except Exception:
         pass
-    return f"v{__version__} (git недоступен)"
+    return f"ClarifAI v{__version__} (git недоступен)"
 
 
 def _req_brief(r: Requirement) -> dict:
