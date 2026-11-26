@@ -58,7 +58,7 @@ def _inline(s: str) -> str:
 
 
 CSS = """
-:root{--fg:#1d2330;--muted:#5b6475;--line:#e3e6ec;--bg:#fff;--soft:#f6f7f9;--accent:#1f5eff;
+:root{--fg:#1d2330;--muted:#5b6475;--line:#e3e6ec;--bg:#fff;--soft:#f6f7f9;--accent:#7c3aed;
 --crit:#c62828;--major:#ef6c00;--minor:#b28704;--ok:#2e7d32}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 "Segoe UI",system-ui,-apple-system,Roboto,"DejaVu Sans",sans-serif}
 main{max-width:1100px;margin:0 auto;padding:32px 20px 80px}
@@ -71,7 +71,7 @@ td.c{text-align:center}td.fail{color:var(--crit);font-weight:700}td.okm{color:va
 blockquote{margin:8px 0;padding:8px 12px;border-left:3px solid var(--accent);background:var(--soft);color:#333}
 .callout{padding:14px 16px;border-radius:8px;margin:12px 0;border:1px solid}
 .callout.ok{background:#edf7ee;border-color:#a5d6a7}.callout.warn{background:#fff6e5;border-color:#ffcc80}
-.callout.bad{background:#fdecec;border-color:#ef9a9a}.callout.info{background:#eef3ff;border-color:#b3c7ff}
+.callout.bad{background:#fdecec;border-color:#ef9a9a}.callout.info{background:#f3efff;border-color:#c4b5fd}
 .callout b.t{display:block;margin-bottom:4px;font-size:16px}
 .card{border:1px solid var(--line);border-left:4px solid var(--minor);border-radius:6px;padding:10px 14px;margin:10px 0;background:#fff}
 .card.critical{border-left-color:var(--crit)}.card.major{border-left-color:var(--major)}
@@ -158,7 +158,7 @@ def to_pdf(blocks: list, path: str | Path, title: str = "Отчёт") -> None:
     pdf.add_page()
     W = pdf.epw
     colors = {"critical": (198, 40, 40), "major": (239, 108, 0), "minor": (178, 135, 4),
-              "ok": (46, 125, 50), "warn": (239, 108, 0), "bad": (198, 40, 40), "info": (31, 94, 255)}
+              "ok": (46, 125, 50), "warn": (239, 108, 0), "bad": (198, 40, 40), "info": (124, 58, 237)}
 
     def para(text, size=9.5, style="", indent=0.0, color=(0, 0, 0)):
         pdf.set_font("DejaVu", style, size)
@@ -184,13 +184,13 @@ def to_pdf(blocks: list, path: str | Path, title: str = "Отчёт") -> None:
         elif isinstance(b, Q):
             y0 = pdf.get_y()
             para(b.text, 9, "", indent=4, color=(60, 60, 60))
-            pdf.set_draw_color(31, 94, 255)
+            pdf.set_draw_color(124, 58, 237)
             pdf.set_line_width(0.6)
             pdf.line(pdf.l_margin + 1, y0, pdf.l_margin + 1, pdf.get_y())
             pdf.set_line_width(0.2)
             pdf.ln(1.5)
         elif isinstance(b, Callout):
-            c = colors.get(b.kind, (31, 94, 255))
+            c = colors.get(b.kind, (124, 58, 237))
             y0 = pdf.get_y()
             para(b.title, 11, "B", indent=4, color=c)
             para(b.text, 9.5, "", indent=4)

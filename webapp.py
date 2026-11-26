@@ -48,7 +48,7 @@ async def lifespan(_app):
         yield
 
 
-app = FastAPI(title="AI Requirements Validator", version=__version__, lifespan=lifespan)
+app = FastAPI(title="ClarifAI", version=__version__, lifespan=lifespan)
 
 
 @app.middleware("http")
