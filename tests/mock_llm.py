@@ -62,9 +62,10 @@ RESPONSES = {
              "result_b": "штраф не начисляется", "conflict": True, "quote_a": "Штраф 50 ₸ за каждый полный день просрочки",
              "quote_b": "штраф не начисляется независимо от истории просрочек"}],
         "findings": []},
-    "probe": {"findings": [
-        {"req_ids": ["R-03"], "criterion": "CMP", "severity": "major", "quotes": [{"text": "При продлении срока"}],
-         "problem": "Сколько раз можно продлевать срок? Документ не отвечает.", "question": "Есть ли лимит продлений?"}]},
+    "probe": {"probes": [
+        {"req_id": "R-03", "question": "Сколько раз можно продлевать срок?", "answered": False, "criterion": "CMP", "severity": "major", "why": "лимит не указан"},
+        {"req_id": "R-03", "question": "Можно ли продлить уже просроченную книгу?", "answered": False, "criterion": "CMP", "severity": "major"},
+        {"req_id": "R-01", "question": "Сколько книг можно взять?", "answered": True, "answer_quote": "до 5 книг одновременно"}]},
 }
 
 

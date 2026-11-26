@@ -23,7 +23,7 @@ from .prompts import (
 )
 from .sandbox import UnsafeCode, run_code
 from .schemas import (
-    Assessment, ConsistencyResponse, Coverage, CriticResponse, DocProfile, FindingsResponse, ExtractResponse, Finding, IndividualResponse, Quote, Requirement,
+    Assessment, ConsistencyResponse, Coverage, CriticResponse, DocProfile, FindingsResponse, ProbeResponse, ExtractResponse, Finding, IndividualResponse, Quote, Requirement,
     SetResponse, SimOutput, SimulationCode, Verdict,
 )
 
@@ -78,6 +78,12 @@ def agent_version() -> str:
 def _req_brief(r: Requirement) -> dict:
     return {"id": r.id, "doc_id": r.doc_id, "kind": r.kind, "section": r.section, "quote": r.quote,
             "lines": f"L{r.line_start}-L{r.line_end}" if r.line_start else None}
+
+
+def _same(a: str, b: str) -> bool:
+    """Грубое сравнение результатов: без регистра, пробелов, знаков препинания и валюты."""
+    norm = lambda s: re.sub(r"[\s.,;:«»\"'₸()]+", "", (s or "").lower().replace("ё", "е"))
+    return norm(a) == norm(b)
 
 
 def _fix_findings(data):
@@ -177,6 +183,8 @@ class Pipeline:
         ids = {r.id for r in reqs}
         out: list[Finding] = []
         for c in resp.ac_checks:
+            if c.match is None:  # модель не заполнила вывод — сравниваем сами
+                c.match = _same(c.computed, c.expected)
             if c.match:
                 continue
             out.append(Finding(
@@ -189,6 +197,8 @@ class Pipeline:
                 question="Какой результат правильный — по требованию или по критерию приёмки?",
             ))
         for p in resp.pair_checks:
+            if p.conflict is None:
+                p.conflict = bool(p.result_a and p.result_b) and not _same(p.result_a, p.result_b)
             if not p.conflict:
                 continue
             out.append(Finding(
@@ -216,17 +226,31 @@ class Pipeline:
         batches = [targets[i:i + bs] for i in range(0, len(targets), bs)]
         self.progress("probe", f"Вопросы разработчика: {len(targets)} требований, пакетов {len(batches)}")
 
+        by_id = {r.id: r for r in reqs}
+
         def one(n_batch):
             n, batch = n_batch
             resp = self.llm.ask(f"probe-{n}", SYSTEM, probe_prompt(doc.numbered(), [_req_brief(r) for r in batch],
-                                                                   self._known(findings), self.ctx), FindingsResponse, fix=_fix_findings)
+                                                                   self._known(findings), self.ctx), ProbeResponse)
             ids = {r.id for r in batch}
-            res = []
-            for f in resp.findings:
-                if f.req_ids and not ids.intersection(f.req_ids):
+            groups: dict[tuple[str, str], list] = {}
+            for p in resp.probes:
+                if p.req_id not in ids or p.answered is not False:
                     continue
-                f.scope, f.source = "requirement", "llm"
-                res.append(f)
+                crit = p.criterion if p.criterion in INDIVIDUAL_CODES else "CMP"
+                groups.setdefault((p.req_id, crit), []).append(p)
+            res = []
+            for (rid, crit), ps in groups.items():  # вопросы одного требования и критерия — одна находка
+                r = by_id[rid]
+                sevs = [p.severity for p in ps if p.severity in SEVERITY_ORDER] or ["major"]
+                qs = "; ".join(f"{i}) {p.question}" + (f" — {p.why}" if p.why else "") for i, p in enumerate(ps, 1))
+                res.append(Finding(
+                    scope="requirement", source="llm", criterion=crit, severity=min(sevs, key=SEVERITY_ORDER.get), req_ids=[rid],
+                    quotes=[Quote(text=r.quote, line_start=r.line_start, line_end=r.line_end)],  # цитата — из проверенной нарезки
+                    problem=f"Документ не отвечает на вопросы разработчика/тестировщика: {qs}",
+                    recommendation="Дополнить требование ответами на эти вопросы.",
+                    question=ps[0].question,
+                ))
             return res
 
         with ThreadPoolExecutor(max_workers=max(1, self.s.parallel)) as ex:

@@ -97,10 +97,10 @@ class FindingsResponse(BaseModel):
 class AcCheck(BaseModel):
     ac_id: str = Field(description="id критерия приёмки/примера (R-xx)")
     req_ids: list[str] = Field(default_factory=list, description="id требований, по которым считали")
-    steps: str = Field(description="Расчёт по тексту требований, 1–3 шага")
-    computed: str = Field(description="Результат по требованиям")
-    expected: str = Field(description="Ожидаемый результат по критерию")
-    match: bool
+    steps: str = Field(default="", description="Расчёт по тексту требований, 1–3 шага")
+    computed: str = Field(default="", description="Результат по требованиям")
+    expected: str = Field(default="", description="Ожидаемый результат по критерию")
+    match: bool | None = Field(default=None, description="Совпадают ли computed и expected")
     quote_rule: str = Field(default="", description="Дословная цитата правила, по которому считали")
     quote_ac: str = Field(default="", description="Дословная цитата ожидаемого результата критерия")
 
@@ -108,10 +108,10 @@ class AcCheck(BaseModel):
 class PairCheck(BaseModel):
     req_a: str
     req_b: str
-    scenario: str = Field(description="Сценарий, на котором сравниваются требования")
-    result_a: str
-    result_b: str
-    conflict: bool
+    scenario: str = Field(default="", description="Сценарий, на котором сравниваются требования")
+    result_a: str = ""
+    result_b: str = ""
+    conflict: bool | None = None
     quote_a: str = ""
     quote_b: str = ""
 
@@ -120,6 +120,20 @@ class ConsistencyResponse(BaseModel):
     ac_checks: list[AcCheck] = Field(default_factory=list)
     pair_checks: list[PairCheck] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
+
+
+class Probe(BaseModel):
+    req_id: str
+    question: str = Field(description="Вопрос разработчика/тестировщика к требованию")
+    answered: bool | None = Field(default=None, description="Отвечает ли документ на вопрос однозначно")
+    answer_quote: str = Field(default="", description="Дословная цитата ответа из документа, если есть")
+    criterion: str = Field(default="CMP", description="CMP|UNA|VER|COR — если ответа нет")
+    severity: str = Field(default="major", description="critical|major|minor — если ответа нет")
+    why: str = Field(default="", description="Почему ответа нет или он неоднозначен")
+
+
+class ProbeResponse(BaseModel):
+    probes: list[Probe] = Field(default_factory=list)
 
 
 class Coverage(BaseModel):
