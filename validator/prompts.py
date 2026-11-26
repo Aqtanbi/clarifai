@@ -240,7 +240,11 @@ def critic_prompt(numbered_doc: str, reqs: list[dict], findings: list[dict]) -> 
 - top_fixes: 3–7 действий, что исправить в первую очередь, по убыванию важности, с id находок.
 
 Схема ответа:
-{{"decisions":[{{"id":"F-001","action":"keep","severity":"critical","reason":"..."}}],
+Для каждого drop укажи reason_code: "duplicate" (и duplicate_of — id оставленной находки), "wrong" (утверждение неверно по тексту
+документа — объясни в reason, что именно в документе есть), "generic" (общая фраза) или "taste" (вкусовщина).
+
+{{"decisions":[{{"id":"F-001","action":"keep","severity":"critical","reason":"..."}},
+               {{"id":"F-007","action":"drop","reason_code":"duplicate","duplicate_of":"F-003","reason":"..."}}],
  "verdict":{{"ready":"нет","summary":"...","top_fixes":[{{"finding_ids":["F-001","F-007"],"action":"..."}}]}}}}
 
 Требования (JSON):

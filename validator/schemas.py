@@ -186,6 +186,8 @@ class SimOutput(BaseModel):
 class Decision(BaseModel):
     id: str
     action: Literal["keep", "drop"] = "keep"
+    reason_code: str = Field(default="", description="Для drop: duplicate | wrong | generic | taste")
+    duplicate_of: str | None = Field(default=None, description="Для duplicate: id оставленной находки")
     severity: Severity | None = None
     reason: str = ""
 

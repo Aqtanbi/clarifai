@@ -217,9 +217,7 @@ class Pipeline:
         return out, resp
 
     def probe(self, doc: Document, reqs: list[Requirement], findings: list[Finding]) -> list[Finding]:
-        covered = {rid for f in findings for rid in f.req_ids}
-        core = {"functional", "nonfunctional", "data", "integration", "ui"}
-        targets = [r for r in reqs if r.id not in covered or r.kind in core]
+        targets = [r for r in reqs if r.kind != "acceptance"]  # все требования, кроме критериев приёмки
         if not targets:
             return []
         out: list[Finding] = []
@@ -352,12 +350,21 @@ class Pipeline:
                   "severity": f.severity, "quotes": [q.text for q in f.quotes], "problem": f.problem} for f in findings]
         resp = self.llm.ask("critic", SYSTEM, critic_prompt(doc.numbered(), [_req_brief(r) for r in reqs], brief), CriticResponse)
         by_id = {f.id: f for f in findings}
+        drops = [d for d in resp.decisions if d.action == "drop" and d.id in by_id]
+        dropped_ids = {d.id for d in drops if d.reason_code in ("duplicate", "wrong")}
         for d in resp.decisions:
             f = by_id.get(d.id)
-            if not f:
+            if not f or f.source == "rule":
                 continue
-            if d.action == "drop" and f.source != "rule":
-                f.dropped, f.drop_reason = True, f"Рецензент: {d.reason}"
+            if d.action == "drop":
+                code = (d.reason_code or "").lower()
+                if code == "duplicate" and d.duplicate_of in by_id and d.duplicate_of not in dropped_ids:
+                    f.dropped, f.drop_reason = True, f"Рецензент: дубликат {d.duplicate_of}. {d.reason}".strip()
+                elif code == "wrong" and f.source != "simulation":
+                    f.dropped, f.drop_reason = True, f"Рецензент: не подтверждается документом. {d.reason}".strip()
+                else:
+                    # «общая фраза» / «вкусовщина» / без обоснования — не удаляем, а понижаем: пропуск дефекта дороже
+                    f.severity = "minor"
             elif d.severity:
                 f.severity = d.severity
         return resp.verdict

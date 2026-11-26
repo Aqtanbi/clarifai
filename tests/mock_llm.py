@@ -79,7 +79,7 @@ class MockLLM(LLM):
         if key == "critic":
             import json, re
             ids = re.findall(r'"id": "(F-\d+)"', user)
-            return {"decisions": [{"id": i, "action": "keep"} for i in ids][:-1] + ([{"id": ids[-1], "action": "drop", "reason": "дубликат"}] if ids else []),
+            return {"decisions": [{"id": i, "action": "keep"} for i in ids][:-1] + ([{"id": ids[-1], "action": "drop", "reason_code": "duplicate", "duplicate_of": ids[0], "reason": "дубликат"}] if ids else []),
                     "verdict": {"ready": "нет", "summary": "Противоречие П-2/КП-2 и неизмеримое НФТ.",
                                 "top_fixes": [{"finding_ids": ids[:2], "action": "Устранить противоречия"}]}}
         return RESPONSES[key]
