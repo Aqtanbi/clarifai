@@ -38,6 +38,7 @@ class Settings:
     batch_size: int = field(default_factory=lambda: int(os.getenv("BATCH_SIZE", "8")))
     sim_timeout: int = field(default_factory=lambda: int(os.getenv("SIM_TIMEOUT", "20")))
     max_retries: int = field(default_factory=lambda: int(os.getenv("LLM_MAX_RETRIES", "6")))
+    request_timeout: int = field(default_factory=lambda: int(os.getenv("LLM_TIMEOUT", "240")))  # секунд на один запрос
 
     @property
     def model(self) -> str:

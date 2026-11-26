@@ -52,6 +52,7 @@ class LLM:
         self.model = model or self.s.model
         self._client: Any = None
         self._api_key = api_key
+        self.log: Callable[[str], None] = lambda msg: None  # подключается конвейером
 
     # ---------- провайдеры ----------
     def _raw_call(self, system: str, user: str) -> tuple[str, int, int]:
@@ -63,7 +64,9 @@ class LLM:
                 key = self._api_key or self.s.gemini_api_key
                 if not key:
                     raise LLMError("Не задан GEMINI_API_KEY (см. .env.example)")
-                self._client = genai.Client(api_key=key)
+                self._client = genai.Client(
+                    api_key=key, http_options=types.HttpOptions(timeout=self.s.request_timeout * 1000)
+                )
             resp = self._gemini_generate(types, system, user)
             usage = getattr(resp, "usage_metadata", None)
             return (
@@ -77,7 +80,7 @@ class LLM:
 
             if self._client is None:
                 key = self._api_key or self.s.openai_api_key or "not-needed"
-                self._client = OpenAI(api_key=key, base_url=self.s.openai_base_url or None)
+                self._client = OpenAI(api_key=key, base_url=self.s.openai_base_url or None, timeout=self.s.request_timeout)
             resp = self._client.chat.completions.create(
                 model=self.model,
                 temperature=0,
@@ -127,6 +130,7 @@ class LLM:
                 if not ("400" in msg or "INVALID_ARGUMENT" in msg):
                     raise  # сетевые ошибки и 429 обрабатываются повтором выше
                 last = e
+                self.log(f"Модель отклонила параметры запроса (вариант {i + 1}), пробую проще: {msg[:150]}")
         raise LLMError(f"Модель «{self.model}» отклонила запрос во всех вариантах конфигурации: {str(last)[:600]}")
 
     def _call_with_retry(self, system: str, user: str) -> str:
@@ -135,7 +139,9 @@ class LLM:
         for attempt in range(self.s.max_retries):
             try:
                 t0 = time.time()
+                self.log(f"  → запрос к модели ({len(system) + len(user)} символов), ждём ответ…")
                 text, tin, tout = self._raw_call(system, user)
+                self.log(f"  ← ответ за {time.time() - t0:.0f} с ({tout} ток.)")
                 self.stats.seconds += time.time() - t0
                 self.stats.calls += 1
                 self.stats.input_tokens += tin
@@ -146,12 +152,15 @@ class LLM:
             except Exception as e:  # сетевые ошибки, 429, 5xx
                 last = e
                 msg = str(e)
-                retriable = any(x in msg for x in ("429", "RESOURCE_EXHAUSTED", "500", "502", "503", "504", "UNAVAILABLE", "overloaded", "timeout", "Timeout", "Connection"))
+                retriable = any(x in msg for x in ("429", "RESOURCE_EXHAUSTED", "500", "502", "503", "504", "UNAVAILABLE",
+                                                   "overloaded", "timeout", "Timeout", "timed out", "Connection", "ReadTimeout"))
                 if not retriable or attempt == self.s.max_retries - 1:
                     raise LLMError(f"Ошибка LLM: {msg[:500]}") from e
                 m = re.search(r"retry[^0-9]{0,20}(\d+(?:\.\d+)?)s", msg, re.I)
-                wait = float(m.group(1)) + 1 if m else delay
-                time.sleep(min(wait, 65))
+                wait = min(float(m.group(1)) + 1 if m else delay, 65)
+                kind = "лимит запросов API (429)" if ("429" in msg or "RESOURCE_EXHAUSTED" in msg) else f"сбой: {msg[:120]}"
+                self.log(f"  ! {kind}; повтор {attempt + 2}/{self.s.max_retries} через {wait:.0f} с")
+                time.sleep(wait)
                 delay = min(delay * 2, 60)
         raise LLMError(str(last))
 

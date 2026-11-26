@@ -94,6 +94,8 @@ class Pipeline:
         self.llm = llm or LLM(self.s)
         self.o = options or Options()
         self.progress = progress or (lambda stage, msg: None)
+        if hasattr(self.llm, "log"):
+            self.llm.log = lambda msg: self.progress("llm", msg)
 
     # ---------- этапы ----------
     def extract(self, doc: Document, g: Grounder) -> list[Requirement]:
