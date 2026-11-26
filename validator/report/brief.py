@@ -85,6 +85,26 @@ def critical_defects(active: list[Finding], reqs_by_id: dict) -> list:
     return out
 
 
+def consistency_blocks(r: RunResult, reqs_by_id: dict) -> list:
+    """Сверка критериев приёмки и пар правил: расчёт агента по тексту требований."""
+    c = r.consistency
+    if not c or (not c.ac_checks and not c.pair_checks):
+        return []
+    out: list = [H(3, "Сверка критериев приёмки с требованиями")]
+    if c.ac_checks:
+        bad = sum(1 for x in c.ac_checks if not x.match)
+        out.append(P(f"Каждый критерий приёмки пересчитан по тексту требований: совпало **{len(c.ac_checks) - bad}** из "
+                     f"**{len(c.ac_checks)}**."))
+        out.append(Table(["Критерий", "Ожидается", "По требованиям", "Расчёт", ""],
+                         [[x.ac_id, _short(x.expected, 90), _short(x.computed, 90), _short(x.steps, 180), "✓" if x.match else "✗"]
+                          for x in c.ac_checks], widths=[0.08, 0.2, 0.2, 0.47, 0.05], small=True))
+    if c.pair_checks:
+        conf = [p for p in c.pair_checks if p.conflict]
+        out.append(P(f"Проверено пар связанных требований: **{len(c.pair_checks)}**, противоречат друг другу: **{len(conf)}**"
+                     + (": " + "; ".join(f"{p.req_a} ↔ {p.req_b}" for p in conf) if conf else "") + "."))
+    return out
+
+
 def build_brief(r: RunResult) -> list:
     b: list = []
     reqs_by_id = {x.id: x for x in r.requirements}
@@ -194,6 +214,8 @@ def build_brief(r: RunResult) -> list:
         b.append(P("Этап отключён параметром запуска."))
     else:
         b.append(P(f"Не выполнялась: {_short(sim.get('reason') or 'ошибка выполнения', 300)}"))
+
+    b.extend(consistency_blocks(r, reqs_by_id))
 
     # ---------- 6. Сводка ----------
     b.append(H(2, "6. Сводка"))

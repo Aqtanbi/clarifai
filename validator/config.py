@@ -30,6 +30,9 @@ class Settings:
     provider: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "gemini").lower())
     gemini_api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
     gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"))
+    # запасные модели при перегрузке основной (503), через запятую; пусто — без переключения
+    gemini_fallback: str = field(default_factory=lambda: os.getenv("GEMINI_FALLBACK_MODELS", "gemini-3.5-flash"))
+    parallel: int = field(default_factory=lambda: int(os.getenv("LLM_PARALLEL", "4")))  # одновременных запросов к модели
     openai_api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
     openai_base_url: str = field(default_factory=lambda: os.getenv("OPENAI_BASE_URL", ""))
     openai_model: str = field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4o-mini"))

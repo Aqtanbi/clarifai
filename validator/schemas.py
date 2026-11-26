@@ -94,6 +94,34 @@ class FindingsResponse(BaseModel):
     findings: list[Finding] = Field(default_factory=list)
 
 
+class AcCheck(BaseModel):
+    ac_id: str = Field(description="id критерия приёмки/примера (R-xx)")
+    req_ids: list[str] = Field(default_factory=list, description="id требований, по которым считали")
+    steps: str = Field(description="Расчёт по тексту требований, 1–3 шага")
+    computed: str = Field(description="Результат по требованиям")
+    expected: str = Field(description="Ожидаемый результат по критерию")
+    match: bool
+    quote_rule: str = Field(default="", description="Дословная цитата правила, по которому считали")
+    quote_ac: str = Field(default="", description="Дословная цитата ожидаемого результата критерия")
+
+
+class PairCheck(BaseModel):
+    req_a: str
+    req_b: str
+    scenario: str = Field(description="Сценарий, на котором сравниваются требования")
+    result_a: str
+    result_b: str
+    conflict: bool
+    quote_a: str = ""
+    quote_b: str = ""
+
+
+class ConsistencyResponse(BaseModel):
+    ac_checks: list[AcCheck] = Field(default_factory=list)
+    pair_checks: list[PairCheck] = Field(default_factory=list)
+    findings: list[Finding] = Field(default_factory=list)
+
+
 class Coverage(BaseModel):
     req_id: str
     covered_by: list[str] = Field(default_factory=list, description="ID требований-критериев приёмки, которые проверяют это требование")

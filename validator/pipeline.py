@@ -5,6 +5,7 @@ import json
 import re
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -22,7 +23,7 @@ from .prompts import (
 )
 from .sandbox import UnsafeCode, run_code
 from .schemas import (
-    Assessment, Coverage, CriticResponse, DocProfile, FindingsResponse, ExtractResponse, Finding, IndividualResponse, Quote, Requirement,
+    Assessment, ConsistencyResponse, Coverage, CriticResponse, DocProfile, FindingsResponse, ExtractResponse, Finding, IndividualResponse, Quote, Requirement,
     SetResponse, SimOutput, SimulationCode, Verdict,
 )
 
@@ -50,6 +51,7 @@ class RunResult:
     passport: dict
     grounding: dict
     profile: DocProfile | None = None
+    consistency: ConsistencyResponse | None = None
     timings: dict = field(default_factory=dict)
 
     @property
@@ -130,76 +132,106 @@ class Pipeline:
         self.progress("extract", f"Выделено требований: {len(reqs)}")
         return reqs
 
-    def check_individual(self, doc: Document, reqs: list[Requirement]) -> tuple[dict[str, Assessment], list[Finding]]:
+    def individual_batch(self, doc: Document, tag: str, batch: list[Requirement]) -> tuple[dict[str, Assessment], list[Finding]]:
+        resp = self.llm.ask(f"individual-{tag}", SYSTEM, individual_prompt(doc.numbered(), [_req_brief(r) for r in batch], self.ctx),
+                            IndividualResponse, fix=_fix_findings)
+        ids = {r.id for r in batch}
         assessments: dict[str, Assessment] = {}
-        findings: list[Finding] = []
-        bs = max(1, self.s.batch_size)
-        batches = [reqs[i:i + bs] for i in range(0, len(reqs), bs)]
+        for a in resp.assessments:
+            if a.req_id in ids and a.marks:
+                a.marks = {k: v for k, v in a.marks.items() if k in INDIVIDUAL_CODES}
+                assessments[a.req_id] = a
+        findings = []
+        for f in resp.findings:
+            if f.req_ids and not ids.intersection(f.req_ids):
+                continue  # находка не про требования этого пакета — её даст свой пакет
+            f.scope, f.source = "requirement", "llm"
+            findings.append(f)
+        return assessments, findings
 
-        def run_batch(tag: str, batch: list[Requirement]) -> None:
-            resp = self.llm.ask(f"individual-{tag}", SYSTEM, individual_prompt(doc.numbered(), [_req_brief(r) for r in batch], self.ctx),
-                                IndividualResponse, fix=_fix_findings)
-            ids = {r.id for r in batch}
-            for a in resp.assessments:
-                if a.req_id in ids and a.marks:
-                    a.marks = {k: v for k, v in a.marks.items() if k in INDIVIDUAL_CODES}
-                    assessments[a.req_id] = a
-            for f in resp.findings:
-                if f.req_ids and not ids.intersection(f.req_ids):
-                    continue  # находка не про требования этого пакета — её даст свой пакет
-                f.scope, f.source = "requirement", "llm"
-                findings.append(f)
-
-        for n, batch in enumerate(batches, 1):
-            self.progress("individual", f"Проверка требований: пакет {n}/{len(batches)}")
-            run_batch(str(n), batch)
-        # ТЗ: проверка КАЖДОГО требования — если модель пропустила часть требований, дозапрашиваем их
-        missing = [r for r in reqs if r.id not in assessments]
-        if missing:
-            self.progress("individual", f"Модель пропустила оценку {len(missing)} требований — дозапрашиваю")
-            for i in range(0, len(missing), bs):
-                run_batch(f"retry-{i // bs + 1}", missing[i:i + bs])
-        still = [r.id for r in reqs if r.id not in assessments]
-        if still:
-            self.progress("individual", f"Без оценки модели остались: {', '.join(still)}")
-        # гарантируем согласованность: fail в матрице ⇔ есть находка
+    @staticmethod
+    def sync_marks(assessments: dict[str, Assessment], findings: list[Finding]) -> None:
+        """Согласованность: fail в матрице ⇔ есть находка."""
         for f in findings:
             for rid in f.req_ids:
                 a = assessments.setdefault(rid, Assessment(req_id=rid))
                 if f.criterion in INDIVIDUAL_CODES:
                     a.marks[f.criterion] = "fail"
-        return assessments, findings
 
     @staticmethod
     def _known(findings: list[Finding]) -> list[str]:
         return [f"{','.join(f.req_ids) or 'набор'} {f.criterion}: {f.problem[:110]}" for f in findings]
 
-    def consistency(self, doc: Document, reqs: list[Requirement], findings: list[Finding]) -> list[Finding]:
-        self.progress("consistency", "Сверка противоречий: критерии приёмки ↔ требования, пары правил")
-        resp = self.llm.ask("consistency", SYSTEM, consistency_prompt(doc.numbered(), [_req_brief(r) for r in reqs],
-                                                                      self._known(findings), self.ctx), FindingsResponse, fix=_fix_findings)
+    def consistency(self, doc: Document, reqs: list[Requirement], findings: list[Finding]) -> tuple[list[Finding], ConsistencyResponse]:
+        self.progress("consistency", "Сверка противоречий: расчёт каждого критерия приёмки, пары правил")
+        briefs = [_req_brief(r) for r in reqs]
+        resp = self.llm.ask("consistency", SYSTEM, consistency_prompt(doc.numbered(), briefs, self._known(findings), self.ctx),
+                            ConsistencyResponse, fix=_fix_findings)
+        acc = [r.id for r in reqs if r.kind == "acceptance"]
+        missing = [a for a in acc if a not in {c.ac_id for c in resp.ac_checks}]
+        if missing:  # модель пропустила критерии — дозапрос только по ним
+            self.progress("consistency", f"Нет расчёта для критериев {', '.join(missing)} — дозапрашиваю")
+            extra = self.llm.ask("consistency-retry", SYSTEM, consistency_prompt(doc.numbered(), briefs, self._known(findings), self.ctx,
+                                                                                 only_ac=missing), ConsistencyResponse, fix=_fix_findings)
+            resp.ac_checks += [c for c in extra.ac_checks if c.ac_id in missing]
+        ids = {r.id for r in reqs}
+        out: list[Finding] = []
+        for c in resp.ac_checks:
+            if c.match:
+                continue
+            out.append(Finding(
+                scope="set", source="llm", criterion="S-CON", severity="critical",
+                req_ids=[x for x in [c.ac_id, *c.req_ids] if x in ids],
+                quotes=[Quote(text=q) for q in (c.quote_ac, c.quote_rule) if q],
+                problem=f"Критерий приёмки {c.ac_id} противоречит требованиям: ожидается «{c.expected}», а по тексту требований "
+                        f"получается «{c.computed}». Расчёт: {c.steps}",
+                recommendation="Привести требование и критерий приёмки к одному правилу и явно зафиксировать его.",
+                question="Какой результат правильный — по требованию или по критерию приёмки?",
+            ))
+        for p in resp.pair_checks:
+            if not p.conflict:
+                continue
+            out.append(Finding(
+                scope="set", source="llm", criterion="S-CON", severity="critical",
+                req_ids=[x for x in (p.req_a, p.req_b) if x in ids],
+                quotes=[Quote(text=q) for q in (p.quote_a, p.quote_b) if q],
+                problem=f"Требования {p.req_a} и {p.req_b} противоречат друг другу в сценарии: {p.scenario} "
+                        f"По {p.req_a}: {p.result_a}. По {p.req_b}: {p.result_b}.",
+                recommendation="Определить приоритет правил или уточнить условия, при которых действует каждое.",
+                question="Какое из правил должно действовать в этом сценарии?",
+            ))
         for f in resp.findings:
             f.scope, f.source = "set", "llm"
-        return resp.findings
+            out.append(f)
+        return out, resp
 
     def probe(self, doc: Document, reqs: list[Requirement], findings: list[Finding]) -> list[Finding]:
         covered = {rid for f in findings for rid in f.req_ids}
-        targets = [r for r in reqs if r.id not in covered]
+        core = {"functional", "nonfunctional", "data", "integration", "ui"}
+        targets = [r for r in reqs if r.id not in covered or r.kind in core]
         if not targets:
             return []
         out: list[Finding] = []
         bs = max(1, self.s.batch_size)
         batches = [targets[i:i + bs] for i in range(0, len(targets), bs)]
-        for n, batch in enumerate(batches, 1):
-            self.progress("probe", f"Вопросы разработчика к требованиям без находок: пакет {n}/{len(batches)} ({len(targets)} треб.)")
+        self.progress("probe", f"Вопросы разработчика: {len(targets)} требований, пакетов {len(batches)}")
+
+        def one(n_batch):
+            n, batch = n_batch
             resp = self.llm.ask(f"probe-{n}", SYSTEM, probe_prompt(doc.numbered(), [_req_brief(r) for r in batch],
-                                                                   self._known(findings + out), self.ctx), FindingsResponse, fix=_fix_findings)
+                                                                   self._known(findings), self.ctx), FindingsResponse, fix=_fix_findings)
             ids = {r.id for r in batch}
+            res = []
             for f in resp.findings:
                 if f.req_ids and not ids.intersection(f.req_ids):
                     continue
                 f.scope, f.source = "requirement", "llm"
-                out.append(f)
+                res.append(f)
+            return res
+
+        with ThreadPoolExecutor(max_workers=max(1, self.s.parallel)) as ex:
+            for res in ex.map(one, enumerate(batches, 1)):
+                out += res
         return out
 
     def check_set(self, doc: Document, reqs: list[Requirement]) -> SetResponse:
@@ -316,30 +348,69 @@ class Pipeline:
         g = Grounder(doc)
         st = time.time(); prof = self.profile(doc); tick("Профиль", st)
         st = time.time(); reqs = self.extract(doc, g); tick("Нарезка", st)
-        st = time.time(); assessments, findings = self.check_individual(doc, reqs); tick("Проверка требований", st)
-        st = time.time(); set_resp = self.check_set(doc, reqs); tick("Проверка набора", st)
-        findings += set_resp.findings
-        if self.o.deep:
-            for name, stage in (("Сверка противоречий", self.consistency), ("Вопросы разработчика", self.probe)):
-                st = time.time()
+        # ---- Фаза 2: независимые проверки параллельно ----
+        bs = max(1, self.s.batch_size)
+        batches = [reqs[i:i + bs] for i in range(0, len(reqs), bs)]
+        sim_skip = None
+        if not self.o.simulate:
+            sim_skip = {"status": "disabled", "reason": "Отключено параметром запуска", "code": "", "output": None, "attempts": 0, "errors": []}
+        elif prof is not None and not prof.formalizable:
+            sim_skip = {"status": "skipped", "reason": "По профилю документа в нём нет правил с числами/условиями и примеров, которые можно проверить расчётом",
+                        "code": "", "output": None, "attempts": 0, "errors": []}
+        st = time.time()
+        self.progress("parallel", f"Параллельно: проверка {len(reqs)} требований ({len(batches)} пакетов), набора"
+                      + (", сверка противоречий" if self.o.deep else "") + (", проверка расчётом" if not sim_skip else ""))
+        with ThreadPoolExecutor(max_workers=max(1, self.s.parallel)) as ex:
+            fut_ind = [ex.submit(self.individual_batch, doc, str(n), b) for n, b in enumerate(batches, 1)]
+            fut_set = ex.submit(self.check_set, doc, reqs)
+            fut_con = ex.submit(self.consistency, doc, reqs, []) if self.o.deep else None
+            fut_sim = ex.submit(self.simulate, doc, reqs) if not sim_skip else None
+            assessments: dict[str, Assessment] = {}
+            findings: list[Finding] = []
+            for fu in fut_ind:
+                a, fs = fu.result()
+                assessments.update(a)
+                findings += fs
+            set_resp = fut_set.result()
+            findings += set_resp.findings
+            cons = None
+            if fut_con:
                 try:
-                    findings += stage(doc, reqs, findings)
-                except Exception as e:  # дополнительные проходы не должны ронять прогон
-                    self.progress("deep", f"{name}: этап пропущен ({str(e)[:150]})")
-                tick(name, st)
+                    cf, cons = fut_con.result()
+                    findings += cf
+                except Exception as e:  # дополнительный проход не должен ронять прогон
+                    self.progress("consistency", f"Сверка противоречий пропущена ({str(e)[:150]})")
+            if fut_sim:
+                try:
+                    sim = fut_sim.result()
+                except Exception as e:  # симуляция не должна ронять весь прогон
+                    sim = {"status": "failed", "reason": str(e)[:500], "code": "", "output": None, "attempts": 0, "errors": [str(e)]}
+            else:
+                sim = sim_skip
+        findings += self.simulation_findings(sim, reqs)
+        tick("Проверки (параллельно)", st)
 
-        sim = {"status": "disabled", "reason": "Отключено параметром запуска", "code": "", "output": None, "attempts": 0, "errors": []}
-        if self.o.simulate and prof is not None and not prof.formalizable:
-            sim = {"status": "skipped", "reason": "По профилю документа в нём нет правил с числами/условиями и примеров, которые можно проверить расчётом",
-                   "code": "", "output": None, "attempts": 0, "errors": []}
-        elif self.o.simulate:
+        # ТЗ: проверка КАЖДОГО требования — дозапрос оценки пропущенных моделью
+        missing = [r for r in reqs if r.id not in assessments]
+        if missing:
+            self.progress("individual", f"Модель пропустила оценку {len(missing)} требований — дозапрашиваю")
+            for i in range(0, len(missing), bs):
+                a, fs = self.individual_batch(doc, f"retry-{i // bs + 1}", missing[i:i + bs])
+                assessments.update(a)
+                findings += fs
+        still = [r.id for r in reqs if r.id not in assessments]
+        if still:
+            self.progress("individual", f"Без оценки модели остались: {', '.join(still)}")
+
+        # ---- Фаза 3: вопросы разработчика (учитывает уже найденное) ----
+        if self.o.deep:
             st = time.time()
             try:
-                sim = self.simulate(doc, reqs)
-            except Exception as e:  # симуляция не должна ронять весь прогон
-                sim = {"status": "failed", "reason": str(e)[:500], "code": "", "output": None, "attempts": 0, "errors": [str(e)]}
-            findings += self.simulation_findings(sim, reqs)
-            tick("Симуляция", st)
+                findings += self.probe(doc, reqs, findings)
+            except Exception as e:
+                self.progress("probe", f"Вопросы разработчика: этап пропущен ({str(e)[:150]})")
+            tick("Вопросы разработчика", st)
+        self.sync_marks(assessments, findings)
 
         if self.o.lint:
             findings += run_lint(doc, reqs)
@@ -398,7 +469,8 @@ class Pipeline:
             "sha256": doc.sha256[:16],
             "date": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z (UTC%z)"),
             "provider": self.llm.provider,
-            "model": self.llm.model,
+            "model": (", ".join(f"{m} — {n} запр." for m, n in self.llm.stats.models_used.items())
+                      if set(self.llm.stats.models_used) - {self.llm.model} else self.llm.model),
             "agent_version": agent_version(),
             "llm_calls": self.llm.stats.calls,
             "llm_cached": self.llm.stats.cached,
@@ -408,7 +480,8 @@ class Pipeline:
         }
         return RunResult(doc=doc, requirements=reqs, assessments=assessments, findings=findings,
                          coverage=set_resp.coverage, glossary_gaps=set_resp.glossary_gaps, verdict=verdict,
-                         simulation=sim, passport=passport, grounding=dict(g.stats), timings=timings, profile=prof)
+                         simulation=sim, passport=passport, grounding=dict(g.stats), timings=timings, profile=prof,
+                         consistency=cons)
 
 
 def run_file(path: str | Path, options: Options | None = None, progress: Progress | None = None, llm: LLM | None = None) -> RunResult:

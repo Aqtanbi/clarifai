@@ -186,6 +186,10 @@ def build_report(r: RunResult) -> list:
         b.append(P(f"Модель не построена: {sim.get('reason') or 'ошибка выполнения'}"
                    + (f". Последняя ошибка: {_short(sim['errors'][-1], 300)}" if sim.get("errors") else "")))
 
+    from .brief import consistency_blocks
+
+    b.extend(consistency_blocks(r, reqs_by_id))
+
     # 6. Сводка
     b.append(H(2, "6. Сводка"))
     crit_by = Counter(f.criterion for f in active)

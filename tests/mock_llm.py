@@ -53,10 +53,15 @@ RESPONSES = {
     ], "coverage": [{"req_id": "R-01", "covered_by": [], "comment": "Лимит 5 книг не проверяется"}],
         "glossary_gaps": ["«активный абонемент» — П-1"]},
     "simulate": {"applicable": True, "reason": "Расчёт штрафа", "code": SIM_CODE},
-    "consistency": {"findings": [
-        {"req_ids": ["R-02", "R-05"], "criterion": "S-CON", "severity": "critical",
-         "quotes": [{"text": "Штраф 50 ₸ за каждый полный день просрочки"}, {"text": "Штраф 300 ₸"}],
-         "problem": "Возврат 20 марта: 19 дней − 14 = 5 дней × 50 ₸ = 250 ₸, а критерий ожидает 300 ₸.", "recommendation": "Согласовать формулу и критерий."}]},
+    "consistency": {
+        "ac_checks": [
+            {"ac_id": "R-05", "req_ids": ["R-02"], "steps": "19 дней − 14 = 5 дней × 50 ₸", "computed": "250 ₸", "expected": "300 ₸",
+             "match": False, "quote_rule": "Штраф 50 ₸ за каждый полный день просрочки", "quote_ac": "Штраф 300 ₸"}],
+        "pair_checks": [
+            {"req_a": "R-02", "req_b": "R-03", "scenario": "Книга просрочена на 3 дня, затем продлена.", "result_a": "штраф 150 ₸",
+             "result_b": "штраф не начисляется", "conflict": True, "quote_a": "Штраф 50 ₸ за каждый полный день просрочки",
+             "quote_b": "штраф не начисляется независимо от истории просрочек"}],
+        "findings": []},
     "probe": {"findings": [
         {"req_ids": ["R-03"], "criterion": "CMP", "severity": "major", "quotes": [{"text": "При продлении срока"}],
          "problem": "Сколько раз можно продлевать срок? Документ не отвечает.", "question": "Есть ли лимит продлений?"}]},
