@@ -8,6 +8,20 @@ from .build import build_report
 from .interactive import to_interactive_html
 
 
+def _safe_write(path: Path, writer) -> Path:
+    """Пишет файл; если он занят (открыт в просмотрщике на Windows) — сохраняет рядом под другим именем."""
+    try:
+        writer(path)
+        return path
+    except PermissionError:
+        from datetime import datetime
+
+        alt = path.with_name(f"{path.stem}_{datetime.now():%H%M%S}{path.suffix}")
+        writer(alt)
+        print(f"Внимание: {path} открыт в другой программе — отчёт сохранён как {alt}")
+        return alt
+
+
 def blocks_for(result, full: bool = False) -> list:
     return build_report(result) if full else build_brief(result)
 from .render import to_html, to_markdown, to_pdf
@@ -21,23 +35,18 @@ def write_reports(result, out_path: str | Path, pdf: bool = True, html: bool = T
     blocks = blocks_for(result, full)
     title = f"Отчёт о проверке: {result.doc.title}"
     written: dict[str, Path] = {}
-    md = base.with_suffix(".md")
-    md.write_text(to_markdown(blocks), encoding="utf-8")
-    written["md"] = md
-    js = base.with_suffix(".json")
-    js.write_text(to_json(result), encoding="utf-8")
-    written["json"] = js
+    md_text = to_markdown(blocks)
+    written["md"] = _safe_write(base.with_suffix(".md"), lambda p: p.write_text(md_text, encoding="utf-8"))
+    js_text = to_json(result)
+    written["json"] = _safe_write(base.with_suffix(".json"), lambda p: p.write_text(js_text, encoding="utf-8"))
     if html or out.suffix.lower() in (".html", ".htm"):
-        h = base.with_suffix(".html")
-        h.write_text(to_html(blocks, title), encoding="utf-8")
-        written["html"] = h
-        ih = base.parent / f"{base.name}_interactive.html"
-        ih.write_text(to_interactive_html(result), encoding="utf-8")
-        written["interactive"] = ih
+        html_text = to_html(blocks, title)
+        written["html"] = _safe_write(base.with_suffix(".html"), lambda p: p.write_text(html_text, encoding="utf-8"))
+        int_text = to_interactive_html(result)
+        written["interactive"] = _safe_write(base.parent / f"{base.name}_interactive.html",
+                                             lambda p: p.write_text(int_text, encoding="utf-8"))
     if pdf or out.suffix.lower() == ".pdf":
-        p = base.with_suffix(".pdf")
-        to_pdf(blocks, p, title)
-        written["pdf"] = p
+        written["pdf"] = _safe_write(base.with_suffix(".pdf"), lambda p: to_pdf(blocks, p, title))
     return written
 
 
