@@ -1,4 +1,8 @@
-"""Оценка полноты агента по эталону: python eval/run_eval.py reports/report.json [eval/gold.json]
+"""Оценка полноты агента по эталону: python eval/run_eval.py reports/report.json eval/gold.json
+
+Эталон (gold.json) — список дефектов, составленный командой вручную для конкретного документа. В репозиторий он
+не входит (eval/*.json в .gitignore) и в промпты агента не передаётся: это инструмент разработки, а не часть агента.
+Формат: {"items": [{"id", "severity", "title", "anchors": [фрагменты документа], "keywords": [признаки проблемы]}]}
 
 Находка засчитывается эталонному дефекту, если её цитата содержит один из anchors,
 а описание (проблема/рекомендация) — одно из keywords. Это грубая автоматическая
@@ -15,7 +19,9 @@ def norm(s: str) -> str:
 
 def main():
     rep = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-    gold = json.loads(Path(sys.argv[2] if len(sys.argv) > 2 else Path(__file__).with_name("gold.json")).read_text(encoding="utf-8"))["items"]
+    if len(sys.argv) < 3:
+        sys.exit("Использование: python eval/run_eval.py reports/report.json eval/gold.json")
+    gold = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))["items"]
     findings = [f for f in rep["findings"] if not f.get("dropped")]
     matched_f = set()
     rows = []

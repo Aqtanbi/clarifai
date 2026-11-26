@@ -41,7 +41,7 @@ Linux/macOS: `python3 -m venv .venv && source .venv/bin/activate`, далее т
 1. Откройте https://aistudio.google.com/apikey и войдите с Google-аккаунтом.
 2. Нажмите **Create API key** и скопируйте ключ.
 3. Вставьте его в `.env`: `GEMINI_API_KEY=...`. Бесплатного тарифа достаточно.
-4. Модель задаётся в `GEMINI_MODEL` (по умолчанию `gemini-3.8-flash`; модели 2.5 для новых ключей отключены). Список доступных: `python main.py --list-models`.
+4. Модель задаётся в `GEMINI_MODEL`. **Команда использует `gemini-3.5-flash-lite`** (Google AI Studio, бесплатный тариф): на ней сформирован сдаваемый отчёт, она же стоит по умолчанию. Модели 2.5 для новых ключей отключены. Список доступных моделей: `python main.py --list-models`. Модель, на которой выполнен прогон, всегда записывается в паспорт отчёта.
 
 Другие провайдеры: `LLM_PROVIDER=openai` с любым OpenAI-совместимым API (OpenAI, OpenRouter, Groq, локальная Ollama через `OPENAI_BASE_URL=http://localhost:11434/v1`).
 
@@ -137,10 +137,10 @@ uvicorn webapp:app --reload
 
 ```bat
 python tests\test_pipeline.py
-python eval\run_eval.py reports\report.json
+python eval\run_eval.py reports\report.json eval\gold.json
 ```
 
-`test_pipeline.py` — офлайн-тест конвейера на моке LLM (без ключа). `run_eval.py` считает полноту (recall) находок по эталонному списку дефектов `eval/gold.json`, составленному командой вручную. Он нужен, чтобы сравнивать версии промптов и модели. Эталон в промпты **не передаётся**.
+`test_pipeline.py` — офлайн-тест конвейера на моке LLM (без ключа). `run_eval.py` считает полноту (recall) находок по эталонному списку дефектов, который команда составляет вручную для своего документа (формат описан в начале скрипта). Это инструмент разработки для сравнения версий промптов и моделей: эталон в репозиторий не входит и агенту не передаётся.
 
 ## Структура
 
