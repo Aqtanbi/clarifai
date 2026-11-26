@@ -40,7 +40,7 @@ Linux/macOS: `python3 -m venv .venv && source .venv/bin/activate`, далее т
 1. Откройте https://aistudio.google.com/apikey и войдите с Google-аккаунтом.
 2. Нажмите **Create API key** и скопируйте ключ.
 3. Вставьте его в `.env`: `GEMINI_API_KEY=...`. Бесплатного тарифа достаточно.
-4. Модель задаётся в `GEMINI_MODEL` (по умолчанию `gemini-2.5-flash`). Список доступных: `python main.py --list-models`.
+4. Модель задаётся в `GEMINI_MODEL` (по умолчанию `gemini-3.8-flash`; модели 2.5 для новых ключей отключены). Список доступных: `python main.py --list-models`.
 
 Другие провайдеры: `LLM_PROVIDER=openai` с любым OpenAI-совместимым API (OpenAI, OpenRouter, Groq, локальная Ollama через `OPENAI_BASE_URL=http://localhost:11434/v1`).
 

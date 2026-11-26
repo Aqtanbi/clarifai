@@ -64,15 +64,7 @@ class LLM:
                 if not key:
                     raise LLMError("Не задан GEMINI_API_KEY (см. .env.example)")
                 self._client = genai.Client(api_key=key)
-            resp = self._client.models.generate_content(
-                model=self.model,
-                contents=user,
-                config=types.GenerateContentConfig(
-                    system_instruction=system,
-                    temperature=0,
-                    response_mime_type="application/json",
-                ),
-            )
+            resp = self._gemini_generate(types, system, user)
             usage = getattr(resp, "usage_metadata", None)
             return (
                 resp.text or "",
@@ -100,6 +92,42 @@ class LLM:
             )
 
         raise LLMError(f"Неизвестный LLM_PROVIDER: {self.provider}")
+
+    # Разные модели Gemini принимают разные параметры: при отказе (400 INVALID_ARGUMENT)
+    # пробуем следующий, более простой вариант конфигурации и запоминаем рабочий.
+    _GEMINI_VARIANTS = [
+        {"system": True, "temperature": True, "json": True},
+        {"system": True, "temperature": False, "json": True},
+        {"system": True, "temperature": False, "json": False},
+        {"system": False, "temperature": False, "json": False},
+    ]
+
+    def _gemini_generate(self, types, system: str, user: str):
+        start = getattr(self, "_gemini_variant", 0)
+        last: Exception | None = None
+        for i in range(start, len(self._GEMINI_VARIANTS)):
+            v = self._GEMINI_VARIANTS[i]
+            cfg = types.GenerateContentConfig(
+                system_instruction=system if v["system"] else None,
+                temperature=0 if v["temperature"] else None,
+                response_mime_type="application/json" if v["json"] else None,
+            )
+            contents = user if v["system"] else f"{system}\n\n{user}"
+            try:
+                resp = self._client.models.generate_content(model=self.model, contents=contents, config=cfg)
+                self._gemini_variant = i
+                return resp
+            except Exception as e:
+                msg = str(e)
+                if "404" in msg or "NOT_FOUND" in msg:
+                    raise LLMError(
+                        f"Модель «{self.model}» недоступна для вашего ключа. Выберите другую из списка "
+                        f"`python main.py --list-models` и укажите в .env: GEMINI_MODEL=<имя>.\nОтвет API: {msg[:400]}"
+                    ) from e
+                if not ("400" in msg or "INVALID_ARGUMENT" in msg):
+                    raise  # сетевые ошибки и 429 обрабатываются повтором выше
+                last = e
+        raise LLMError(f"Модель «{self.model}» отклонила запрос во всех вариантах конфигурации: {str(last)[:600]}")
 
     def _call_with_retry(self, system: str, user: str) -> str:
         delay = 5.0
