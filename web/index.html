@@ -137,6 +137,7 @@ footer b{color:var(--ink)}
       <div id="fname" class="fname"></div>
       <label class="opt"><input type="checkbox" id="simulate" checked> Проверка расчётом (исполняемая модель)</label>
       <label class="opt"><input type="checkbox" id="critic" checked> Рецензент (отсев ложных находок)</label>
+      <label class="opt"><input type="checkbox" id="full"> Полный отчёт (по умолчанию — краткий)</label>
       <details id="adv"><summary>Ключ и модель</summary>
         <div class="field">Свой API-ключ (не сохраняется)<input type="password" id="key" placeholder="по умолчанию — ключ сервера"></div>
         <div class="field">Модель<input type="text" id="model" placeholder="по умолчанию — из настроек сервера"></div>
@@ -194,7 +195,7 @@ $('run').onclick = async () => {
   $('err').textContent = ''; $('log').innerHTML = ''; $('run').disabled = true;
   const t0 = Date.now();
   const fd = new FormData();
-  fd.append('file', file); fd.append('simulate', $('simulate').checked); fd.append('critic', $('critic').checked);
+  fd.append('file', file); fd.append('simulate', $('simulate').checked); fd.append('critic', $('critic').checked); fd.append('full', $('full').checked);
   fd.append('api_key', $('key').value); fd.append('model', $('model').value); fd.append('access_code', $('code').value);
   try {
     const resp = await fetch('/api/validate', {method: 'POST', body: fd});

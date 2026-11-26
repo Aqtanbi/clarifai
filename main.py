@@ -20,6 +20,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-html", action="store_true", help="Не формировать HTML")
     ap.add_argument("--no-sim", action="store_true", help="Отключить проверку расчётом (симуляцию)")
     ap.add_argument("--no-critic", action="store_true", help="Отключить рецензента")
+    ap.add_argument("--full", action="store_true", help="Полный отчёт (по умолчанию — краткий)")
     ap.add_argument("--lint", action="store_true", help="Добавить детерминированные проверки без ИИ (размытые слова, заглушки)")
     ap.add_argument("--no-cache", action="store_true", help="Не использовать кэш ответов LLM")
     ap.add_argument("--model", help="Переопределить модель (иначе из .env)")
@@ -56,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
         progress("load", f"Модель: {llm.provider}/{llm.model} (настройки: {ENV_FILE if ENV_FILE.exists() else 'файл .env не найден!'})")
         res = Pipeline(llm=llm, settings=s, options=Options(simulate=not a.no_sim, critic=not a.no_critic, lint=a.lint),
                        progress=progress).run(doc)
-        files = write_reports(res, a.output, pdf=not a.no_pdf, html=not a.no_html)
+        files = write_reports(res, a.output, pdf=not a.no_pdf, html=not a.no_html, full=a.full)
     except (LLMError, FileNotFoundError, ValueError) as e:
         print(f"Ошибка: {e}", file=sys.stderr)
         return 2

@@ -14,8 +14,7 @@ from .grounding import Grounder
 from .llm import LLM
 from .parsing import load_document
 from .pipeline import Options, Pipeline
-from .report import write_reports
-from .report.build import build_report
+from .report import blocks_for, write_reports
 from .report.render import to_markdown
 
 INSTRUCTIONS = (
@@ -44,10 +43,10 @@ def build_server(remote: bool = False) -> MCPServer:
 
     @mcp.tool(description="Полная проверка документа требований. Возвращает сводку и отчёт в Markdown. "
                           "text — текст документа (markdown/plain), filename — имя для паспорта отчёта.")
-    def validate_requirements(text: str, filename: str = "requirements.md", simulate: bool = True) -> str:
+    def validate_requirements(text: str, filename: str = "requirements.md", simulate: bool = True, full: bool = False) -> str:
         doc = load_document(data=text.encode("utf-8"), filename=filename if Path(filename).suffix in (".md", ".txt") else filename + ".md")
         res = Pipeline(llm=LLM(), options=Options(simulate=simulate)).run(doc)
-        return json.dumps(_summary(res), ensure_ascii=False, indent=1) + "\n\n" + to_markdown(build_report(res))
+        return json.dumps(_summary(res), ensure_ascii=False, indent=1) + "\n\n" + to_markdown(blocks_for(res, full))
 
     @mcp.tool(description="Выделить отдельные требования из документа (без оценки). Возвращает JSON-список.")
     def extract_requirements(text: str, filename: str = "requirements.md") -> str:
@@ -69,9 +68,10 @@ def build_server(remote: bool = False) -> MCPServer:
     if not remote:
         @mcp.tool(description="Проверить файл требований на диске (PDF/DOCX/MD/TXT) и записать отчёт (MD, HTML, PDF). "
                               "Возвращает сводку и пути к файлам отчёта.")
-        def validate_requirements_file(path: str, output: str = "reports/report.md", simulate: bool = True, pdf: bool = True) -> str:
+        def validate_requirements_file(path: str, output: str = "reports/report.md", simulate: bool = True, pdf: bool = True,
+                                       full: bool = False) -> str:
             res = Pipeline(llm=LLM(), options=Options(simulate=simulate)).run(load_document(path))
-            files = write_reports(res, output, pdf=pdf)
+            files = write_reports(res, output, pdf=pdf, full=full)
             return json.dumps({**_summary(res), "files": {k: str(v.resolve()) for k, v in files.items()}}, ensure_ascii=False, indent=1)
 
     return mcp

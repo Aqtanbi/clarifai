@@ -3,16 +3,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .brief import build_brief
 from .build import build_report
+
+
+def blocks_for(result, full: bool = False) -> list:
+    return build_report(result) if full else build_brief(result)
 from .render import to_html, to_markdown, to_pdf
 
 
-def write_reports(result, out_path: str | Path, pdf: bool = True, html: bool = True) -> dict[str, Path]:
+def write_reports(result, out_path: str | Path, pdf: bool = True, html: bool = True, full: bool = False) -> dict[str, Path]:
     """out_path: report.md | report.pdf | report.html — остальные форматы кладутся рядом с тем же именем."""
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     base = out.with_suffix("")
-    blocks = build_report(result)
+    blocks = blocks_for(result, full)
     title = f"Отчёт о проверке: {result.doc.title}"
     written: dict[str, Path] = {}
     md = base.with_suffix(".md")
@@ -52,11 +57,11 @@ def to_json(result) -> str:
     }, ensure_ascii=False, indent=1)
 
 
-def render_all(result) -> dict[str, bytes | str]:
+def render_all(result, full: bool = False) -> dict[str, bytes | str]:
     """Для веба: все форматы в памяти."""
     import tempfile
 
-    blocks = build_report(result)
+    blocks = blocks_for(result, full)
     title = f"Отчёт о проверке: {result.doc.title}"
     with tempfile.TemporaryDirectory() as td:
         p = Path(td) / "report.pdf"

@@ -79,6 +79,7 @@ async def validate(
     file: UploadFile = File(...),
     simulate: bool = Form(True),
     critic: bool = Form(True),
+    full: bool = Form(False),
     api_key: str = Form(""),
     model: str = Form(""),
     access_code: str = Form(""),
@@ -103,7 +104,7 @@ async def validate(
             llm = LLM(Settings(), api_key=api_key or None, model=model or None)
             res = Pipeline(llm=llm, options=Options(simulate=simulate, critic=critic), progress=progress).run(doc)
             progress("render", "Формирую отчёт (MD, HTML, PDF)")
-            out = render_all(res)
+            out = render_all(res, full=full)
             act = res.active
             q.put({"type": "result", "summary": {
                 "document": res.doc.title, "requirements": len(res.requirements), "violations": len(act),
