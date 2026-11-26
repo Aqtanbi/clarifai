@@ -1,0 +1,23 @@
+# Render.com Blueprint: New → Blueprint → выбрать этот репозиторий. Ключ GEMINI_API_KEY вводится в панели Render.
+services:
+  - type: web
+    name: clarifai
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn webapp:app --host 0.0.0.0 --port $PORT --timeout-keep-alive 75
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: GEMINI_FALLBACK_MODELS
+        value: gemini-3.5-flash
+      - key: LLM_PARALLEL
+        value: "3"
+      - key: ACCESS_CODE
+        sync: false
