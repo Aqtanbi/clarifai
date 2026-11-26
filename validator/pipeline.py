@@ -17,11 +17,11 @@ from .lint import run_lint
 from .llm import LLM
 from .parsing import Document
 from .prompts import (
-    SYSTEM, critic_prompt, extract_prompt, individual_prompt, set_prompt, simulation_fix_prompt, simulation_prompt,
+    SYSTEM, critic_prompt, extract_prompt, profile_context, profile_prompt, individual_prompt, set_prompt, simulation_fix_prompt, simulation_prompt,
 )
 from .sandbox import UnsafeCode, run_code
 from .schemas import (
-    Assessment, Coverage, CriticResponse, ExtractResponse, Finding, IndividualResponse, Quote, Requirement,
+    Assessment, Coverage, CriticResponse, DocProfile, ExtractResponse, Finding, IndividualResponse, Quote, Requirement,
     SetResponse, SimOutput, SimulationCode, Verdict,
 )
 
@@ -32,7 +32,7 @@ Progress = Callable[[str, str], None]
 class Options:
     simulate: bool = True
     critic: bool = True
-    lint: bool = True
+    lint: bool = False  # детерминированный линтер выключен: все проверки делает ИИ
 
 
 @dataclass
@@ -47,6 +47,7 @@ class RunResult:
     simulation: dict  # {"status", "reason", "code", "output": SimOutput|None, "attempts"}
     passport: dict
     grounding: dict
+    profile: DocProfile | None = None
     timings: dict = field(default_factory=dict)
 
     @property
@@ -97,10 +98,23 @@ class Pipeline:
         if hasattr(self.llm, "log"):
             self.llm.log = lambda msg: self.progress("llm", msg)
 
+    ctx: str = ""
+
     # ---------- этапы ----------
+    def profile(self, doc: Document) -> DocProfile | None:
+        self.progress("profile", "Изучаю документ: тип, структура, риски предметной области")
+        try:
+            p = self.llm.ask("profile", SYSTEM, profile_prompt(doc.numbered()), DocProfile)
+        except Exception as e:  # профиль улучшает качество, но не обязателен
+            self.progress("profile", f"Профиль не построен ({str(e)[:120]}), продолжаю без него")
+            return None
+        self.ctx = profile_context(p)
+        self.progress("profile", f"Документ: {p.doc_type}, {p.domain}; проверок под документ: {len(p.focus_checks)}")
+        return p
+
     def extract(self, doc: Document, g: Grounder) -> list[Requirement]:
         self.progress("extract", "Нарезка требований")
-        resp = self.llm.ask("extract", SYSTEM, extract_prompt(doc.numbered()), ExtractResponse)
+        resp = self.llm.ask("extract", SYSTEM, extract_prompt(doc.numbered(), self.ctx), ExtractResponse)
         reqs: list[Requirement] = []
         for i, r in enumerate(resp.requirements, 1):
             r.id = f"R-{i:02d}"  # нормализуем нумерацию
@@ -121,7 +135,7 @@ class Pipeline:
         batches = [reqs[i:i + bs] for i in range(0, len(reqs), bs)]
         for n, batch in enumerate(batches, 1):
             self.progress("individual", f"Проверка требований: пакет {n}/{len(batches)}")
-            resp = self.llm.ask(f"individual-{n}", SYSTEM, individual_prompt(doc.numbered(), [_req_brief(r) for r in batch]),
+            resp = self.llm.ask(f"individual-{n}", SYSTEM, individual_prompt(doc.numbered(), [_req_brief(r) for r in batch], self.ctx),
                                 IndividualResponse, fix=_fix_findings)
             ids = {r.id for r in batch}
             for a in resp.assessments:
@@ -141,7 +155,7 @@ class Pipeline:
 
     def check_set(self, doc: Document, reqs: list[Requirement]) -> SetResponse:
         self.progress("set", "Проверка набора требований целиком")
-        resp = self.llm.ask("set", SYSTEM, set_prompt(doc.numbered(), [_req_brief(r) for r in reqs]), SetResponse,
+        resp = self.llm.ask("set", SYSTEM, set_prompt(doc.numbered(), [_req_brief(r) for r in reqs], self.ctx), SetResponse,
                             fix=_fix_findings)
         for f in resp.findings:
             f.scope, f.source = "set", "llm"
@@ -150,7 +164,7 @@ class Pipeline:
     def simulate(self, doc: Document, reqs: list[Requirement]) -> dict:
         self.progress("simulate", "Строю исполняемую модель требований")
         res: dict = {"status": "skipped", "reason": "", "code": "", "output": None, "attempts": 0, "errors": []}
-        sc = self.llm.ask("simulate", SYSTEM, simulation_prompt(doc.numbered(), [_req_brief(r) for r in reqs]), SimulationCode)
+        sc = self.llm.ask("simulate", SYSTEM, simulation_prompt(doc.numbered(), [_req_brief(r) for r in reqs], self.ctx), SimulationCode)
         if not sc.applicable or not sc.code.strip():
             res["reason"] = sc.reason or "Нет формализуемых правил"
             return res
@@ -240,13 +254,17 @@ class Pipeline:
             timings[name] = round(time.time() - start, 1)
 
         g = Grounder(doc)
+        st = time.time(); prof = self.profile(doc); tick("Профиль", st)
         st = time.time(); reqs = self.extract(doc, g); tick("Нарезка", st)
         st = time.time(); assessments, findings = self.check_individual(doc, reqs); tick("Проверка требований", st)
         st = time.time(); set_resp = self.check_set(doc, reqs); tick("Проверка набора", st)
         findings += set_resp.findings
 
         sim = {"status": "disabled", "reason": "Отключено параметром запуска", "code": "", "output": None, "attempts": 0, "errors": []}
-        if self.o.simulate:
+        if self.o.simulate and prof is not None and not prof.formalizable:
+            sim = {"status": "skipped", "reason": "По профилю документа в нём нет правил с числами/условиями и примеров, которые можно проверить расчётом",
+                   "code": "", "output": None, "attempts": 0, "errors": []}
+        elif self.o.simulate:
             st = time.time()
             try:
                 sim = self.simulate(doc, reqs)
@@ -322,7 +340,7 @@ class Pipeline:
         }
         return RunResult(doc=doc, requirements=reqs, assessments=assessments, findings=findings,
                          coverage=set_resp.coverage, glossary_gaps=set_resp.glossary_gaps, verdict=verdict,
-                         simulation=sim, passport=passport, grounding=dict(g.stats), timings=timings)
+                         simulation=sim, passport=passport, grounding=dict(g.stats), timings=timings, profile=prof)
 
 
 def run_file(path: str | Path, options: Options | None = None, progress: Progress | None = None, llm: LLM | None = None) -> RunResult:

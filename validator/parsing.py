@@ -159,25 +159,43 @@ def _docx_pages(raw: bytes) -> list[tuple[int | None, str]]:
     import io
 
     import docx
+    from docx.oxml.ns import qn
     from docx.table import Table
     from docx.text.paragraph import Paragraph
 
     d = docx.Document(io.BytesIO(raw))
+    body = list(d.element.body.iterchildren())
+
+    def style_of(el) -> str:
+        p = Paragraph(el, d)
+        return (p.style.name or "").lower() if p.style is not None else ""
+
+    # Если есть стиль «Title», он — уровень 1, а заголовки Heading N сдвигаются на уровень ниже
+    has_title = any(el.tag.endswith("}p") and style_of(el).startswith(("title", "название")) for el in body)
+    shift = 1 if has_title else 0
     out: list[str] = []
-    for child in d.element.body.iterchildren():
+    counter = 0  # автонумерация Word не попадает в текст абзаца — восстанавливаем её
+    for child in body:
         tag = child.tag.rsplit("}", 1)[-1]
         if tag == "p":
             p = Paragraph(child, d)
             txt = p.text.strip()
-            style = (p.style.name or "").lower() if p.style is not None else ""
+            style = style_of(child)
+            numbered = "list number" in style or "нумерованный" in style or child.find(".//" + qn("w:numPr")) is not None
             m = re.search(r"(heading|заголовок)\s*(\d)", style)
             if m and txt:
-                out.append("#" * int(m.group(2)) + " " + txt)
-            elif style.startswith("title") and txt:
+                out.append("#" * min(6, int(m.group(2)) + shift) + " " + txt)
+                counter = 0
+            elif style.startswith(("title", "название")) and txt:
                 out.append("# " + txt)
+            elif numbered and txt:
+                counter += 1
+                out.append(f"{counter}. {txt}")
             elif "list" in style and txt:
                 out.append("* " + txt)
             else:
+                if txt:
+                    counter = 0
                 out.append(txt)
         elif tag == "tbl":
             t = Table(child, d)

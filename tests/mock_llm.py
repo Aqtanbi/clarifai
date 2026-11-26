@@ -34,6 +34,10 @@ print(json.dumps({"variants": [{"name": "literal", "literal": True, "description
 '''
 
 RESPONSES = {
+    "profile": {"doc_type": "ТЗ на доработку + спецификация REST API", "domain": "Банковские карты, уведомления",
+                "structure": "Часть A — функциональные требования и критерии приёмки; часть B — API", "numbering": "Ф-1…Ф-4, остальное без номеров",
+                "defined_terms": [], "formalizable": True,
+                "focus_checks": [{"area": "Периоды", "check": "Границы месяца и часовой пояс", "why": "Ф-2 считает расходы по месяцам"}]},
     "extract": {"requirements": [
         {"id": "R-01", "doc_id": "Ф-1", "kind": "functional", "section": "Функциональные требования", "summary": "Порог 1 000–1 000 000 ₸, по умолчанию выключено",
          "quote": "Держатель активной карты KZT задаёт целый порог от 1 000 до 1 000 000 ₸ включительно.", "line_start": 37, "line_end": 37},

@@ -19,6 +19,23 @@ class Quote(BaseModel):
     location: str | None = None
 
 
+# ---------- профиль документа ----------
+class FocusCheck(BaseModel):
+    area: str = Field(description="Область риска, например «Периоды и часовые пояса»")
+    check: str = Field(description="Что именно проверить в этом документе")
+    why: str = Field(default="", description="Почему это важно для данного документа (со ссылкой на его содержание)")
+
+
+class DocProfile(BaseModel):
+    doc_type: str = Field(description="Тип документа: ТЗ, SRS, BRD, user stories, API-спецификация, ...")
+    domain: str = Field(description="Предметная область")
+    structure: str = Field(default="", description="Как устроен документ: части, разделы, где находятся требования")
+    numbering: str = Field(default="", description="Схема идентификаторов требований или «нет нумерации»")
+    defined_terms: list[str] = Field(default_factory=list, description="Термины, которые определены в документе")
+    formalizable: bool = Field(default=True, description="Есть ли правила с числами/условиями/состояниями или примеры, которые можно проверить расчётом")
+    focus_checks: list[FocusCheck] = Field(default_factory=list, description="8–15 проверок, специфичных для этого документа")
+
+
 # ---------- нарезка ----------
 class Requirement(BaseModel):
     id: str = Field(description="Идентификатор в отчёте: R-01, R-02, ...")
