@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ClarifAI — документ и находки</title>
+<style>
+:root{
+  --black:#0a0a0b;--ink:#111113;--white:#fff;--paper:#fafafa;--g1:#f2f2f3;--g2:#e4e4e7;--g3:#a1a1aa;--g4:#52525b;
+  --violet:#7c3aed;--violet-2:#a78bfa;--violet-soft:#f3efff;
+  --crit:#e11d48;--crit-bg:rgba(225,29,72,.16);--major:#d97706;--major-bg:rgba(245,158,11,.22);--minor:#7c3aed;--minor-bg:rgba(124,58,237,.12);
+  --sans:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--paper);color:var(--ink);font:14px/1.55 var(--sans);display:flex;flex-direction:column}
+header{background:var(--black);color:var(--white);padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.logo{font-weight:800;letter-spacing:-.02em}.logo span{color:var(--violet-2)}
+.ttl{font-weight:600;flex:1;min-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e4e4e7}
+.ready{font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;background:#27272a}
+.ready.нет{background:var(--crit)}.ready.условно{background:var(--major)}.ready.да{background:#16a34a}
+.cnt{font:500 12px var(--mono);color:var(--g3)}
+main{flex:1;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);min-height:0}
+@media (max-width:860px){main{grid-template-columns:1fr;grid-template-rows:55vh auto}}
+.pane{overflow:auto;min-height:0}
+.doc{background:var(--white);border-right:1px solid var(--g2);padding:18px 0 60px}
+.side{padding:14px 14px 60px}
+.legend{position:sticky;top:-18px;z-index:2;background:var(--white);margin:-18px 0 8px;padding:10px 18px;border-bottom:1px solid var(--g2);display:flex;gap:14px;font-size:12px;color:var(--g4);flex-wrap:wrap}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:5px}
+.ln{display:grid;grid-template-columns:44px 1fr;padding:1px 18px 1px 0;border-left:3px solid transparent;cursor:default}
+.ln .no{font:11px/1.9 var(--mono);color:var(--g3);text-align:right;padding-right:12px;user-select:none}
+.ln .tx{min-width:0;overflow-wrap:anywhere}
+.ln.has{cursor:pointer}
+.ln.s-critical{border-left-color:var(--crit)}.ln.s-major{border-left-color:var(--major)}.ln.s-minor{border-left-color:var(--minor)}
+.ln.lv-critical{background:rgba(225,29,72,.05)}.ln.lv-major{background:rgba(245,158,11,.06)}.ln.lv-minor{background:rgba(124,58,237,.04)}
+.ln.active{background:var(--violet-soft)!important;box-shadow:inset 3px 0 0 var(--violet)}
+.ln.flash{animation:flash 1.2s}
+@keyframes flash{0%{background:#ddd6fe}100%{}}
+.h1{font-size:22px;font-weight:800;margin:6px 0}.h2{font-size:18px;font-weight:800;margin:14px 0 4px}.h3{font-size:15px;font-weight:700;margin:10px 0 2px}.h4,.h5,.h6{font-weight:700}
+.blank{height:8px}
+.row{display:flex;border:1px solid var(--g2);border-top:0;font-size:13px}.row.first{border-top:1px solid var(--g2);background:var(--g1);font-weight:600}
+.row>span{flex:1;padding:4px 8px;border-left:1px solid var(--g2);min-width:0}.row>span:first-child{border-left:0}
+.li{padding-left:16px;position:relative}.li::before{content:"•";position:absolute;left:2px;color:var(--g3)}
+.code{font:12px var(--mono);background:var(--g1);padding:0 8px;white-space:pre-wrap}
+mark{background:none;color:inherit;border-radius:3px;padding:0 1px;cursor:pointer}
+mark.m-critical{background:var(--crit-bg);box-shadow:inset 0 -2px 0 var(--crit)}
+mark.m-major{background:var(--major-bg);box-shadow:inset 0 -2px 0 var(--major)}
+mark.m-minor{background:var(--minor-bg);box-shadow:inset 0 -2px 0 var(--minor)}
+mark.active{background:#c4b5fd;box-shadow:inset 0 -2px 0 var(--violet)}
+body.f-critical mark:not(.m-critical),body.f-major mark:not(.m-major),body.f-minor mark:not(.m-minor),body.f-sim mark:not(.m-sim){background:none;box-shadow:none}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;position:sticky;top:-14px;background:var(--paper);padding:8px 0;z-index:2}
+.chip{border:1px solid var(--g2);background:var(--white);border-radius:999px;padding:5px 11px;font:600 12px var(--sans);cursor:pointer;color:var(--ink)}
+.chip.on{background:var(--black);color:var(--white);border-color:var(--black)}
+.card{background:var(--white);border:1px solid var(--g2);border-left:4px solid var(--minor);border-radius:10px;margin-bottom:8px;cursor:pointer;transition:.12s}
+.card.critical{border-left-color:var(--crit)}.card.major{border-left-color:var(--major)}
+.card:hover{border-color:var(--g3)}.card.active{border-color:var(--violet);box-shadow:0 0 0 2px var(--violet-soft)}
+.ch{padding:10px 12px}
+.top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--g4)}
+.badge{color:#fff;font-weight:700;border-radius:999px;padding:1px 8px;font-size:11px}
+.badge.critical{background:var(--crit)}.badge.major{background:var(--major)}.badge.minor{background:var(--minor)}
+.sim{font-weight:700;color:var(--violet);font-size:11px;border:1px solid var(--violet-2);border-radius:999px;padding:0 7px}
+.fid{font:600 12px var(--mono);color:var(--ink)}
+.prob{margin-top:5px;font-size:13.5px}
+.body{display:none;border-top:1px solid var(--g1);padding:10px 12px;font-size:13px}
+.card.open .body{display:block}
+.lbl{font-size:11px;font-weight:700;color:var(--g4);text-transform:uppercase;letter-spacing:.04em;margin:8px 0 3px}
+.lbl:first-child{margin-top:0}
+.q{display:block;background:var(--g1);border-radius:6px;padding:6px 8px;margin:4px 0;cursor:pointer;font-size:12.5px}
+.q:hover{background:var(--violet-soft)}.q small{display:block;color:var(--g4);font:11px var(--mono);margin-top:2px}
+.was{background:#fff1f2;border-radius:6px;padding:6px 8px;text-decoration:line-through;text-decoration-color:rgba(225,29,72,.5)}
+.now{background:#f0fdf4;border-radius:6px;padding:6px 8px;margin-top:4px}
+.empty{color:var(--g4);text-align:center;padding:40px 10px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Clarif<span>AI</span></div>
+  <div class="ttl" id="ttl"></div>
+  <div class="cnt" id="cnt"></div>
+  <div class="ready" id="ready"></div>
+</header>
+<main>
+  <div class="pane doc" id="doc">
+    <div class="legend"><span><i style="background:var(--crit)"></i>критично</span><span><i style="background:var(--major)"></i>существенно</span><span><i style="background:var(--minor)"></i>незначительно</span><span>Клик по подсветке — открыть находку</span></div>
+  </div>
+  <div class="pane side" id="side">
+    <div class="chips" id="chips"></div>
+    <div id="list"></div>
+  </div>
+</main>
+<script>
+const DATA = /*__CLARIFAI_DATA__*/null;
+(function () {
+  if (!DATA) { document.getElementById('list').innerHTML = '<div class="empty">Нет данных</div>'; return; }
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const SEVN = {critical: 'Критично', major: 'Существенно', minor: 'Незначительно'};
+  const RANK = {critical: 0, major: 1, minor: 2};
+  const READY = {'нет': 'Нельзя начинать разработку', 'условно': 'Можно после исправлений', 'да': 'Можно начинать'};
+  const F = DATA.findings, byId = Object.fromEntries(F.map(f => [f.id, f]));
+
+  $('ttl').textContent = DATA.title;
+  $('ready').textContent = READY[DATA.verdict.ready] || DATA.verdict.ready;
+  $('ready').className = 'ready ' + DATA.verdict.ready;
+  $('ready').title = DATA.verdict.summary;
+  const c = {critical: 0, major: 0, minor: 0}; F.forEach(f => c[f.sev]++);
+  $('cnt').textContent = `${DATA.requirements} треб. · ${F.length} находок · ${c.critical} крит.`;
+
+  // ---------- карта «строка → находки» ----------
+  const norm = s => String(s).toLowerCase().replace(/ё/g, 'е').replace(/[«»“”„"']/g, '"').replace(/[—–−]/g, '-').replace(/[*`_|#]/g, '').replace(/\s+/g, ' ').trim();
+  const lineF = {};     // n -> [finding ids]
+  const marksBy = {};   // n -> [{needle, f}]
+  F.forEach(f => f.quotes.forEach(q => {
+    if (!q.l1) return;
+    for (let n = q.l1; n <= (q.l2 || q.l1); n++) (lineF[n] = lineF[n] || []).push(f.id);
+    // подсветка фрагмента: целиком для однострочной цитаты, по частям — для многострочной/табличной
+    const needle = [norm(q.text)];
+    for (let n = q.l1; n <= (q.l2 || q.l1); n++) (marksBy[n] = marksBy[n] || []).push({needles: needle, f: f.id});
+  }));
+  const topSev = ids => ids.map(i => byId[i].sev).sort((a, b) => RANK[a] - RANK[b])[0];
+
+  // Подсветка в строке: ищем нормализованную цитату в нормализованном тексте, переносим границы на оригинал
+  function markText(text, marks) {
+    if (!marks || !marks.length) return esc(text);
+    // построение нормализованной строки с картой индексов
+    let nt = '', map = [], prevSp = true;
+    const tr = {'ё':'е','«':'"','»':'"','“':'"','”':'"','„':'"',"'":'"','—':'-','–':'-','−':'-'};
+    for (let i = 0; i < text.length; i++) {
+      let ch = tr[text[i]] || text[i].toLowerCase();
+      if ('*`_|#'.includes(ch)) continue;
+      if (/\s/.test(ch)) { if (prevSp) continue; ch = ' '; prevSp = true; } else prevSp = false;
+      nt += ch; map.push(i);
+    }
+    const cover = new Array(text.length).fill(null).map(() => []);
+    marks.forEach(m => m.needles.forEach(nd => {
+      // цитата может быть длиннее ячейки/строки: пробуем всю, затем самые длинные куски по 4+ слов
+      const cands = [nd];
+      const w = nd.split(' ');
+      if (w.length > 6) for (let k = Math.min(w.length - 1, 10); k >= 4; k--) for (let s = 0; s + k <= w.length; s += Math.max(1, Math.floor(k / 2))) cands.push(w.slice(s, s + k).join(' '));
+      for (const cnd of cands) {
+        if (cnd.length < 3) continue;
+        const at = nt.indexOf(cnd);
+        if (at >= 0) { for (let j = map[at]; j <= map[at + cnd.length - 1]; j++) cover[j].push(m.f); return; }
+      }
+    }));
+    let out = '', i = 0;
+    while (i < text.length) {
+      const key = cover[i].join(',');
+      let j = i; while (j < text.length && cover[j].join(',') === key) j++;
+      const seg = esc(text.slice(i, j));
+      if (key) { const ids = [...new Set(cover[i])]; out += `<mark class="m-${topSev(ids)}${ids.some(x => byId[x].sim) ? ' m-sim' : ''}" data-f="${ids.join(',')}">${seg}</mark>`; }
+      else out += seg;
+      i = j;
+    }
+    return out;
+  }
+
+  // ---------- документ ----------
+  const doc = $('doc'); let inCode = false, prevTable = false, html = '';
+  DATA.lines.forEach(L => {
+    const raw = L.t, t = raw.trim(), ids = lineF[L.n] || [], mk = marksBy[L.n];
+    if (t.startsWith('```')) { inCode = !inCode; return; }
+    if (/^\|?\s*:?-{2,}/.test(t) && t.includes('-') && /^[|\s:\-]+$/.test(t)) return;
+    let cls = 'ln', inner;
+    const clean = s => s.replace(/\*\*/g, '').replace(/`/g, '');
+    if (inCode) inner = `<div class="code">${markText(raw, mk)}</div>`;
+    else if (!t) { inner = '<div class="blank"></div>'; }
+    else if (/^#{1,6}\s/.test(t)) { const lv = t.match(/^#+/)[0].length; inner = `<div class="h${lv}">${markText(clean(t.replace(/^#+\s*/, '')), mk)}</div>`; }
+    else if (t.startsWith('|')) {
+      const cells = t.replace(/^\||\|$/g, '').split('|').map(x => clean(x.trim()));
+      inner = `<div class="row${prevTable ? '' : ' first'}">${cells.map(x => `<span>${markText(x, mk)}</span>`).join('')}</div>`;
+    }
+    else if (/^[*\-•]\s/.test(t)) inner = `<div class="li">${markText(clean(t.replace(/^[*\-•]\s+/, '')), mk)}</div>`;
+    else inner = `<div>${markText(clean(t), mk)}</div>`;
+    prevTable = t.startsWith('|') && !inCode;
+    if (ids.length) { const s = topSev(ids); cls += ` has s-${s} lv-${s}`; }
+    html += `<div class="${cls}" id="L${L.n}" data-f="${[...new Set(ids)].join(',')}"><span class="no">${L.n}</span><span class="tx">${inner}</span></div>`;
+  });
+  doc.insertAdjacentHTML('beforeend', html);
+
+  // ---------- находки ----------
+  const reqLabel = id => { const r = DATA.reqs[id]; return r && r.doc_id ? `${id} (${r.doc_id})` : id; };
+  function card(f) {
+    const r0 = f.reqs.length ? DATA.reqs[f.reqs[0]] : null;
+    const qs = f.quotes.map((q, k) => `<span class="q" data-line="${q.l1 || ''}">«${esc(q.text)}»<small>${esc(q.loc || '')}</small></span>`).join('');
+    let body = `<div class="lbl">Где в документе</div>${qs || '<i>набор в целом</i>'}`;
+    body += `<div class="lbl">Проблема</div><div>${esc(f.problem)}</div>`;
+    if (f.evidence && !f.problem.includes(f.evidence)) body += `<div class="lbl">Подтверждено расчётом</div><div>${esc(f.evidence)}</div>`;
+    if (f.rewrite) body += `<div class="lbl">Было → стало</div>${r0 ? `<div class="was">${esc(r0.quote)}</div>` : ''}<div class="now">${esc(f.rewrite)}</div>`;
+    if (f.recommendation) body += `<div class="lbl">Рекомендация</div><div>${esc(f.recommendation)}</div>`;
+    if (f.question) body += `<div class="lbl">Вопрос владельцу продукта</div><div>${esc(f.question)}</div>`;
+    return `<div class="card ${f.sev}" id="C-${f.id}" data-id="${f.id}">
+      <div class="ch"><div class="top"><span class="badge ${f.sev}">${SEVN[f.sev]}</span><span class="fid">${f.id}</span>
+      <span>${esc(f.critName)}</span>${f.sim ? '<span class="sim">✓ расчёт</span>' : ''}<span>${esc(f.reqs.map(reqLabel).join(', ') || 'набор в целом')}</span></div>
+      <div class="prob">${esc(f.problem.length > 190 ? f.problem.slice(0, 189) + '…' : f.problem)}</div></div>
+      <div class="body">${body}</div></div>`;
+  }
+  const filters = [['all', 'Все', F.length], ['critical', 'Критичные', c.critical], ['major', 'Существенные', c.major], ['minor', 'Незначительные', c.minor], ['sim', 'Подтверждено расчётом', F.filter(f => f.sim).length]];
+  let filter = 'all';
+  $('chips').innerHTML = filters.filter(x => x[0] === 'all' || x[2]).map(x => `<button class="chip${x[0] === 'all' ? ' on' : ''}" data-v="${x[0]}">${x[1]} · ${x[2]}</button>`).join('');
+  const visible = f => filter === 'all' || (filter === 'sim' ? f.sim : f.sev === filter);
+  function renderList() {
+    const fs = F.filter(visible).sort((a, b) => RANK[a.sev] - RANK[b.sev] || a.id.localeCompare(b.id));
+    $('list').innerHTML = fs.map(card).join('') || '<div class="empty">Нет находок</div>';
+    document.body.className = filter === 'all' ? '' : 'f-' + filter;
+  }
+  renderList();
+  $('chips').onclick = e => { const b = e.target.closest('.chip'); if (!b) return; filter = b.dataset.v;
+    document.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === b)); renderList(); };
+
+  // ---------- связь документ ↔ находки ----------
+  function clearActive() { document.querySelectorAll('.active').forEach(x => x.classList.remove('active')); }
+  function scrollDoc(n) {
+    const el = $('L' + n); if (!el) return;
+    el.scrollIntoView({behavior: 'smooth', block: 'center'});
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+  }
+  function select(id, {scrollList = false, scrollDocTo = true} = {}) {
+    const f = byId[id]; if (!f) return;
+    if (!visible(f)) { filter = 'all'; document.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x.dataset.v === 'all')); renderList(); }
+    clearActive();
+    const cd = $('C-' + id); cd.classList.add('active', 'open');
+    f.quotes.forEach(q => { for (let n = q.l1; q.l1 && n <= (q.l2 || q.l1); n++) $('L' + n)?.classList.add('active'); });
+    document.querySelectorAll('mark').forEach(m => { if (m.dataset.f.split(',').includes(id)) m.classList.add('active'); });
+    if (scrollList) cd.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    if (scrollDocTo && f.quotes[0] && f.quotes[0].l1) scrollDoc(f.quotes[0].l1);
+  }
+  $('list').onclick = e => {
+    const q = e.target.closest('.q'); if (q && q.dataset.line) { scrollDoc(+q.dataset.line); e.stopPropagation(); return; }
+    const cd = e.target.closest('.card'); if (!cd) return;
+    if (cd.classList.contains('active') && !e.target.closest('.body')) { cd.classList.toggle('open'); return; }
+    select(cd.dataset.id);
+  };
+  doc.onclick = e => {
+    const src = e.target.closest('mark') || e.target.closest('.ln.has'); if (!src) return;
+    const ids = src.dataset.f.split(',').filter(Boolean).sort((a, b) => RANK[byId[a].sev] - RANK[byId[b].sev]);
+    // повторный клик по той же подсветке — следующая находка в этом месте
+    const cur = document.querySelector('.card.active')?.dataset.id;
+    const k = ids.indexOf(cur);
+    select(ids[(k + 1) % ids.length] || ids[0], {scrollList: true, scrollDocTo: false});
+  };
+  // первая (самая серьёзная) находка открыта сразу
+  if (F.length) { const first = [...F].sort((a, b) => RANK[a.sev] - RANK[b.sev])[0]; select(first.id, {scrollDocTo: false}); }
+})();
+</script>
+</body>
+</html>

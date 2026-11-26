@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .brief import build_brief
 from .build import build_report
+from .interactive import to_interactive_html
 
 
 def blocks_for(result, full: bool = False) -> list:
@@ -30,6 +31,9 @@ def write_reports(result, out_path: str | Path, pdf: bool = True, html: bool = T
         h = base.with_suffix(".html")
         h.write_text(to_html(blocks, title), encoding="utf-8")
         written["html"] = h
+        ih = base.parent / f"{base.name}_interactive.html"
+        ih.write_text(to_interactive_html(result), encoding="utf-8")
+        written["interactive"] = ih
     if pdf or out.suffix.lower() == ".pdf":
         p = base.with_suffix(".pdf")
         to_pdf(blocks, p, title)
@@ -67,4 +71,5 @@ def render_all(result, full: bool = False) -> dict[str, bytes | str]:
         p = Path(td) / "report.pdf"
         to_pdf(blocks, p, title)
         pdf_bytes = p.read_bytes()
-    return {"md": to_markdown(blocks), "html": to_html(blocks, title), "pdf": pdf_bytes}
+    return {"md": to_markdown(blocks), "html": to_html(blocks, title), "pdf": pdf_bytes,
+            "interactive": to_interactive_html(result)}

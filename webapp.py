@@ -111,7 +111,7 @@ async def validate(
                 "critical": sum(f.severity == "critical" for f in act), "major": sum(f.severity == "major" for f in act),
                 "minor": sum(f.severity == "minor" for f in act), "ready": res.verdict.ready, "verdict": res.verdict.summary,
                 "model": res.passport["model"], "grounding": res.grounding},
-                "md": out["md"], "html": out["html"], "pdf_base64": base64.b64encode(out["pdf"]).decode()})
+                "md": out["md"], "html": out["html"], "interactive": out["interactive"], "pdf_base64": base64.b64encode(out["pdf"]).decode()})
         except Exception as e:  # noqa: BLE001
             q.put({"type": "error", "message": str(e)[:1000]})
         finally:
