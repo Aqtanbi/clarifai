@@ -11,8 +11,8 @@
 ## Быстрый старт (Windows)
 
 ```bat
-git clone https://github.com/Aqtanbi/adamizer.git
-cd adamizer
+git clone https://github.com/Aqtanbi/clarifai.git
+cd clarifai
 py -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
@@ -127,8 +127,8 @@ uvicorn webapp:app --reload
 {
   "mcpServers": {
     "clarifai": {
-      "command": "C:\\path\\to\\adamizer\\.venv\\Scripts\\python.exe",
-      "args": ["C:\\path\\to\\adamizer\\mcp_server.py"],
+      "command": "C:\\path\\to\\clarifai\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\path\\to\\clarifai\\mcp_server.py"],
       "env": { "GEMINI_API_KEY": "ваш_ключ" }
     }
   }
