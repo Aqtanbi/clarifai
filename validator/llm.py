@@ -30,6 +30,59 @@ class LLMStats:
     by_stage: dict[str, int] = field(default_factory=dict)
 
 
+_INTERNAL_FIELDS = {"scope", "source", "grounded", "dropped", "drop_reason", "evidence", "match", "score",
+                    "location", "quote_match"}
+
+
+def llm_schema(model: type[BaseModel]) -> dict:
+    """JSON-схема для structured output: $ref развёрнуты, служебные поля убраны."""
+    raw = model.model_json_schema()
+    defs = raw.pop("$defs", {})
+
+    def walk(node):
+        if isinstance(node, dict):
+            if "$ref" in node:
+                return walk(defs[node["$ref"].split("/")[-1]])
+            ap = node.get("additionalProperties")
+            if isinstance(ap, dict) and set(ap.get("enum", [])) == {"ok", "fail", "na"}:
+                # отметки по критериям: явные поля, иначе structured output вернёт пустой объект
+                from .criteria import INDIVIDUAL_CODES
+
+                return {"type": "object", "description": node.get("description", ""),
+                        "properties": {c: {"type": "string", "enum": ["ok", "fail", "na"]} for c in INDIVIDUAL_CODES},
+                        "required": list(INDIVIDUAL_CODES)}
+            out = {}
+            for k, v in node.items():
+                if k in ("title", "default"):
+                    continue
+                if k == "properties":
+                    out[k] = {pk: walk(pv) for pk, pv in v.items() if pk not in _INTERNAL_FIELDS}
+                elif k == "required":
+                    out[k] = [x for x in v if x not in _INTERNAL_FIELDS]
+                else:
+                    out[k] = walk(v)
+            return out
+        if isinstance(node, list):
+            return [walk(x) for x in node]
+        return node
+
+    return walk(raw)
+
+
+def parse_json(text: str) -> Any:
+    """json.loads, при неудаче — ремонт (незаэкранированные кавычки, обрезанный хвост)."""
+    t = _strip_json(text)
+    try:
+        return json.loads(t)
+    except json.JSONDecodeError:
+        from json_repair import repair_json
+
+        data = repair_json(t, return_objects=True)
+        if data in ("", None, [], {}):
+            raise
+        return data
+
+
 def _strip_json(text: str) -> str:
     text = text.strip()
     m = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
@@ -55,7 +108,7 @@ class LLM:
         self.log: Callable[[str], None] = lambda msg: None  # подключается конвейером
 
     # ---------- провайдеры ----------
-    def _raw_call(self, system: str, user: str) -> tuple[str, int, int]:
+    def _raw_call(self, system: str, user: str, schema: dict | None = None) -> tuple[str, int, int]:
         if self.provider == "gemini":
             from google import genai
             from google.genai import types
@@ -67,7 +120,7 @@ class LLM:
                 self._client = genai.Client(
                     api_key=key, http_options=types.HttpOptions(timeout=self.s.request_timeout * 1000)
                 )
-            resp = self._gemini_generate(types, system, user)
+            resp = self._gemini_generate(types, system, user, schema)
             usage = getattr(resp, "usage_metadata", None)
             return (
                 resp.text or "",
@@ -99,13 +152,14 @@ class LLM:
     # Разные модели Gemini принимают разные параметры: при отказе (400 INVALID_ARGUMENT)
     # пробуем следующий, более простой вариант конфигурации и запоминаем рабочий.
     _GEMINI_VARIANTS = [
+        {"system": True, "temperature": True, "json": True, "schema": True},
         {"system": True, "temperature": True, "json": True},
         {"system": True, "temperature": False, "json": True},
         {"system": True, "temperature": False, "json": False},
         {"system": False, "temperature": False, "json": False},
     ]
 
-    def _gemini_generate(self, types, system: str, user: str):
+    def _gemini_generate(self, types, system: str, user: str, schema: dict | None = None):
         start = getattr(self, "_gemini_variant", 0)
         last: Exception | None = None
         for i in range(start, len(self._GEMINI_VARIANTS)):
@@ -114,6 +168,7 @@ class LLM:
                 system_instruction=system if v["system"] else None,
                 temperature=0 if v["temperature"] else None,
                 response_mime_type="application/json" if v["json"] else None,
+                response_json_schema=schema if (v.get("schema") and schema) else None,
             )
             contents = user if v["system"] else f"{system}\n\n{user}"
             try:
@@ -133,14 +188,14 @@ class LLM:
                 self.log(f"Модель отклонила параметры запроса (вариант {i + 1}), пробую проще: {msg[:150]}")
         raise LLMError(f"Модель «{self.model}» отклонила запрос во всех вариантах конфигурации: {str(last)[:600]}")
 
-    def _call_with_retry(self, system: str, user: str) -> str:
+    def _call_with_retry(self, system: str, user: str, schema: dict | None = None) -> str:
         delay = 5.0
         last: Exception | None = None
         for attempt in range(self.s.max_retries):
             try:
                 t0 = time.time()
                 self.log(f"  → запрос к модели ({len(system) + len(user)} символов), ждём ответ…")
-                text, tin, tout = self._raw_call(system, user)
+                text, tin, tout = self._raw_call(system, user, schema)
                 self.log(f"  ← ответ за {time.time() - t0:.0f} с ({tout} ток.)")
                 self.stats.seconds += time.time() - t0
                 self.stats.calls += 1
@@ -169,20 +224,22 @@ class LLM:
         h = hashlib.sha256(f"{self.provider}|{self.model}|{system}|{user}".encode()).hexdigest()[:32]
         return Path(self.s.cache_dir) / f"{h}.json"
 
-    def complete_json(self, stage: str, system: str, user: str) -> Any:
+    def complete_json(self, stage: str, system: str, user: str, schema: dict | None = None) -> Any:
         self.stats.by_stage[stage] = self.stats.by_stage.get(stage, 0) + 1
         cp = self._cache_path(system, user)
         if self.s.use_cache and cp.exists():
             self.stats.cached += 1
             return json.loads(cp.read_text(encoding="utf-8"))
-        text = self._call_with_retry(system, user)
+        text = self._call_with_retry(system, user, schema)
         try:
-            data = json.loads(_strip_json(text))
-        except json.JSONDecodeError:
+            data = parse_json(text)
+        except json.JSONDecodeError as e:
+            self.log(f"  ! ответ модели — невалидный JSON ({e}); переспрашиваю")
             text = self._call_with_retry(
-                system, user + "\n\nПредыдущий ответ был невалидным JSON. Верни ТОЛЬКО валидный JSON без комментариев."
-            )
-            data = json.loads(_strip_json(text))
+                system, user + "\n\nПредыдущий ответ был невалидным JSON. Верни ТОЛЬКО валидный JSON без комментариев. "
+                "Кавычки внутри строк экранируй обратной косой чертой (\\\")."
+            , schema)
+            data = parse_json(text)
         if self.s.use_cache:
             try:
                 cp.parent.mkdir(parents=True, exist_ok=True)
@@ -193,7 +250,8 @@ class LLM:
 
     def ask(self, stage: str, system: str, user: str, schema: type[T], fix: Callable[[Any], Any] | None = None) -> T:
         """Запросить JSON и провалидировать pydantic-схемой; при ошибке схемы — одна попытка исправления."""
-        data = self.complete_json(stage, system, user)
+        js = llm_schema(schema)
+        data = self.complete_json(stage, system, user, js)
         if fix:
             data = fix(data)
         try:
@@ -205,7 +263,7 @@ class LLM:
                 + str(e)[:2000]
                 + "\nИсправь и верни ТОЛЬКО валидный JSON по схеме."
             )
-            data = self.complete_json(stage + ":fix", system, retry_user)
+            data = self.complete_json(stage + ":fix", system, retry_user, js)
             if fix:
                 data = fix(data)
             return schema.model_validate(data)

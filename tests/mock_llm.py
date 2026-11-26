@@ -76,7 +76,7 @@ class MockLLM(LLM):
     def __init__(self):
         self.provider, self.model, self.stats = "mock", "mock-model", LLMStats()
 
-    def complete_json(self, stage, system, user):
+    def complete_json(self, stage, system, user, schema=None):
         self.stats.calls += 1
         key = stage.split("-")[0].split(":")[0]
         if key == "critic":
