@@ -104,8 +104,21 @@ def index():
 @app.get("/api/health")
 def health():
     s = Settings()
-    return {"ok": True, "version": __version__, "provider": s.provider, "model": s.model,
+    commit = (os.getenv("RENDER_GIT_COMMIT") or os.getenv("VERCEL_GIT_COMMIT_SHA") or os.getenv("GIT_COMMIT") or "")[:7]
+    return {"ok": True, "version": __version__, "commit": commit or None, "provider": s.provider, "model": s.model,
             "server_key": bool(s.gemini_api_key or s.openai_api_key), "access_code_required": bool(ACCESS_CODE)}
+
+
+@app.post("/api/echo")
+async def echo(request: Request):
+    """Диагностика: принимает любой POST и сообщает размер — чтобы понять, что блокирует фильтр хостинга."""
+    body = await request.body()
+    return {"ok": True, "bytes": len(body), "content_type": request.headers.get("content-type", "")}
+
+
+@app.get("/diag", response_class=HTMLResponse)
+def diag():
+    return (ROOT / "web" / "diag.html").read_text(encoding="utf-8")
 
 
 @app.post("/api/validate")
