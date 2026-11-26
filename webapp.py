@@ -109,18 +109,6 @@ def health():
             "server_key": bool(s.gemini_api_key or s.openai_api_key), "access_code_required": bool(ACCESS_CODE)}
 
 
-@app.post("/api/echo")
-async def echo(request: Request):
-    """Диагностика: принимает любой POST и сообщает размер — чтобы понять, что блокирует фильтр хостинга."""
-    body = await request.body()
-    return {"ok": True, "bytes": len(body), "content_type": request.headers.get("content-type", "")}
-
-
-@app.get("/diag", response_class=HTMLResponse)
-def diag():
-    return (ROOT / "web" / "diag.html").read_text(encoding="utf-8")
-
-
 @app.post("/api/validate")
 async def validate(
     request: Request,
